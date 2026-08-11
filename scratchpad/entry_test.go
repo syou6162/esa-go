@@ -26,6 +26,12 @@ func TestEntryMethods(t *testing.T) {
 	if !entry.IsSameTimestampID(entry.TimestampID) {
 		t.Fatal("IsSameTimestampID() = false")
 	}
+	if entry.IsSameTimestamp(Entry{TimestampID: "160000000000"}) {
+		t.Fatal("IsSameTimestamp() = true for different timestamp")
+	}
+	if entry.IsSameTimestampID("160000000000") {
+		t.Fatal("IsSameTimestampID() = true for different timestamp")
+	}
 }
 
 func TestEntryFirstLineEmpty(t *testing.T) {

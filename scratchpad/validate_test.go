@@ -15,11 +15,13 @@ func TestValidatePostTextIssues(t *testing.T) {
 		{"separator", "text\n---\nmore", "区切り"},
 		{"table separator", "| a | b |\n| --- | --- |", ""},
 		{"heading", "# heading", "見出し"},
+		{"heading on second line", "text\n### heading", "見出し"},
 		{"bold", "**bold**", "ボールド"},
 		{"colon", "key：value", "全角コロン"},
 		{"parentheses", "text（value）", "全角括弧"},
 		{"time", "15:30 memo", "時刻"},
 		{"list", "- item", "マークダウン"},
+		{"asterisk list", "* item", "マークダウン"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,8 +40,21 @@ func TestValidatePostTextIssues(t *testing.T) {
 }
 
 func TestValidatePostTextAllowsNormalText(t *testing.T) {
-	if issues := ValidatePostText("normal text\n- item\n12:30 is allowed here"); len(issues) != 0 {
-		t.Fatalf("issues = %#v", issues)
+	for _, text := range []string{
+		"normal text\n- item\n12:30 is allowed here",
+		"  9:05 is allowed here",
+		"#hashtag",
+	} {
+		if issues := ValidatePostText(text); len(issues) != 0 {
+			t.Fatalf("text %q issues = %#v", text, issues)
+		}
+	}
+}
+
+func TestValidatePostTextMultipleViolations(t *testing.T) {
+	issues := ValidatePostText("# heading\n---\n**bold**")
+	if len(issues) < 3 {
+		t.Fatalf("issues = %#v, want at least 3", issues)
 	}
 }
 
@@ -71,6 +86,7 @@ func TestValidateTitleIssues(t *testing.T) {
 		{"full stop", "title。name", "ピリオド"},
 		{"punctuation", "what?!", "感嘆符"},
 		{"newline", "title\nname", "改行"},
+		{"carriage return", "title\rname", "改行"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,6 +103,9 @@ func TestValidateTitleAllowsNormalTitle(t *testing.T) {
 		if issues := ValidateScratchpadTitle(title); len(issues) != 0 {
 			t.Fatalf("title %q issues = %#v", title, issues)
 		}
+	}
+	if issues := ValidateScratchpadTitle("ｶﾀｶﾅ"); len(issues) != 0 {
+		t.Fatalf("halfwidth katakana title issues = %#v", issues)
 	}
 }
 

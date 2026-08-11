@@ -47,6 +47,27 @@ func TestParseEntriesNormalizesLineEndingsAndRejectsMalformedBlocks(t *testing.T
 	}
 }
 
+func TestParseEntriesEmpty(t *testing.T) {
+	entries, err := ParseEntries("")
+	if err != nil {
+		t.Fatalf("ParseEntries() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d, want 0", len(entries))
+	}
+}
+
+func TestParseEntriesPreservesTrailingNewline(t *testing.T) {
+	entries := Entries{{TimestampID: "153000000000", Text: "テスト\n"}}
+	parsed, err := ParseEntries(entries.Body())
+	if err != nil {
+		t.Fatalf("ParseEntries() error = %v", err)
+	}
+	if len(parsed) != 1 || parsed[0].Text != "テスト\n" {
+		t.Fatalf("parsed = %#v, want trailing newline preserved", parsed)
+	}
+}
+
 func TestEntriesSortedAndBodyAreNonMutating(t *testing.T) {
 	entries := Entries{
 		{TimestampID: "100000000000"},
@@ -74,6 +95,23 @@ func TestEntriesFindAndFindBy(t *testing.T) {
 	}
 	if _, ok := entries.FindBy(nil); ok {
 		t.Fatal("FindBy(nil) unexpectedly found an entry")
+	}
+}
+
+func TestEntriesFindAndFindByReturnFirstDuplicate(t *testing.T) {
+	entries := Entries{
+		{TimestampID: "153000000000", Text: "first"},
+		{TimestampID: "153000000000", Text: "second"},
+	}
+	found, ok := entries.Find("153000000000")
+	if !ok || found.Text != "first" {
+		t.Fatalf("Find() = %#v, %v; want first duplicate", found, ok)
+	}
+	found, ok = entries.FindBy(func(entry Entry) bool {
+		return entry.TimestampID == "153000000000"
+	})
+	if !ok || found.Text != "first" {
+		t.Fatalf("FindBy() = %#v, %v; want first duplicate", found, ok)
 	}
 }
 
@@ -107,6 +145,21 @@ func TestEntriesAddUpdateDeleteCopy(t *testing.T) {
 	}
 }
 
+func TestEntriesAddAtBothEnds(t *testing.T) {
+	entries := Entries{
+		{TimestampID: "153000000000", Text: "middle"},
+		{TimestampID: "150000000000", Text: "old"},
+	}
+	newest := entries.Add(Entry{TimestampID: "160000000000", Text: "new"})
+	if newest[0].ID() != "160000000000" {
+		t.Fatalf("newest insertion = %#v, want new entry first", newest)
+	}
+	oldest := entries.Add(Entry{TimestampID: "140000000000", Text: "oldest"})
+	if oldest[len(oldest)-1].ID() != "140000000000" {
+		t.Fatalf("oldest insertion = %#v, want new entry last", oldest)
+	}
+}
+
 func TestMakeUniqueTimestamp(t *testing.T) {
 	entries := Entries{{TimestampID: "153000000000"}, {TimestampID: "153000000001"}}
 	got, err := entries.MakeUniqueTimestamp("153000000000")
@@ -121,6 +174,35 @@ func TestMakeUniqueTimestamp(t *testing.T) {
 	_, err = (Entries{{TimestampID: "not-a-number"}}).MakeUniqueTimestamp("not-a-number")
 	if err == nil {
 		t.Fatal("invalid colliding timestamp unexpectedly succeeded")
+	}
+}
+
+func TestMakeUniqueTimestampWithoutConflict(t *testing.T) {
+	entries := Entries{{TimestampID: "153000000000", Text: "existing"}}
+	got, err := entries.MakeUniqueTimestamp("160000000000")
+	if err != nil {
+		t.Fatalf("MakeUniqueTimestamp() error = %v", err)
+	}
+	if got != "160000000000" {
+		t.Fatalf("MakeUniqueTimestamp() = %q, want original timestamp", got)
+	}
+}
+
+func TestEntriesDeleteDuplicateAndLast(t *testing.T) {
+	duplicateID := TimestampID("153000000000")
+	entries := Entries{
+		{TimestampID: duplicateID, Text: "first"},
+		{TimestampID: "160000000000", Text: "keep"},
+		{TimestampID: duplicateID, Text: "second"},
+	}
+	deleted := entries.Delete(duplicateID)
+	if len(deleted) != 1 || deleted[0].Text != "keep" {
+		t.Fatalf("Delete() = %#v, want only non-duplicate entry", deleted)
+	}
+
+	only := Entries{{TimestampID: duplicateID, Text: "only"}}
+	if got := only.Delete(duplicateID).Body(); got != "" {
+		t.Fatalf("Body() after deleting last entry = %q, want empty", got)
 	}
 }
 
