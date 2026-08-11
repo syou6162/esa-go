@@ -8,6 +8,12 @@ scratchpad は、esa.io 上の一つの記事へ、メモ・出来事・会話�
 
 記事の検索、作成、更新をどの順序で行うか、記事を誰が所有するか、どのカテゴリ・記事名・タグを使うかは利用側アプリケーションの責務です。
 
+### なぜこの形式を使うか
+
+scratchpad の本文は、esa.io の Web UI で人間がそのまま読める Markdown でありながら、プログラムから個々の entry を安定して参照・更新できる必要があります。各 entry の先頭に TimestampID を含む anchor を置くことで、entry 単位の fragment URL を作れます。entry を separator で区切り、TimestampID の降順で並べることで、最新のメモを記事の先頭で読める状態を保ちつつ、既存 entry の境界と識別子を失わずに read-modify-write できます。
+
+この文書では、その本文 format と entry 操作に共通する pure な仕様だけを定義します。記事の検索・作成や日付の決定など、複数の esa API 呼び出しを組み合わせる手順は利用側アプリケーションが決めます。
+
 ## 用語
 
 - **post**: esa.io の一つの記事。日単位の scratchpad の保存先です。
@@ -30,6 +36,8 @@ entry 同士は separator line で区切ります。serialize された各 entry
 
 実装上の parser は CRLF と CR を LF に正規化してから entry を分割します。anchor がない block、anchor の ID が不正な block、許可されない構造は parse error になります。
 
+parse と serialize は entry の TimestampID と text、および TimestampID 降順の不変条件を保持します。入力の改行を LF に正規化することや separator を canonical な形で出力することは許可されますが、parse した entry の text を別の内容へ変換してはいけません。従って、許可された本文を parse して serialize した結果は byte-for-byte の同一性ではなく、entry の値と domain 上の順序を保つ round-trip になります。
+
 ## TimestampID
 
 TimestampID は次の 12 桁です。
@@ -47,6 +55,8 @@ HHMMSSffffff
 
 入力はちょうど 12 桁の ASCII 数字でなければなりません。時・分・秒の範囲外は reject します。TimestampID は opaque な値型で、`ParseTimestampID` または `NewTimestampIDFromTime` を経由してのみ生成できます。zero value は unset を表し、`String`、`DisplayTime`、`AnchorHTML` は空文字列を返します。TimestampID は parse 成功後に専用型として扱い、下流の処理で raw string を再検証しません。
 
+TimestampID の生成関数は渡された `time.Time` を使って ID を作るだけで、日付の選択やタイムゾーン policy を決めません。利用側が JST の時刻を渡す必要がある場合は、その変換を利用側で行います。空の日付を今日として扱う、日付を JST 基準で解釈する、日付から記事の category を選ぶといった fallback と policy は、この package および esa-go が持つ責務ではありません。
+
 ### 一意性と衝突回避
 
 一つの post 内で TimestampID は一意でなければなりません。同じ ID が既に存在する場合、既存 entry を上書きするのではなく、numeric ID を最小限だけ増分して、parse 可能で未使用の ID を選びます。
@@ -55,13 +65,19 @@ HHMMSSffffff
 
 この collision avoidance は entry data を壊さないための pure logic です。同じ post を複数の処理が同時に更新する場合の lock や cross-process coordination は含みません。
 
-## entry の順序
+## entry の順序と collection 操作
 
 本文は TimestampID の降順、つまり新しい entry から古い entry の順に serialize します。
 
 `Sorted` は元の slice を変更せず、降順の copy を返します。`Update` と `Delete` も、元の collection を意図せず変更しないように扱います。
 
 `Add` は receiver がすでに降順であることを前提に、該当位置へ entry を追加します。同じ TimestampID があれば entry を置き換えます。利用側は、未整列の入力を `Add` へ渡す前に `Sorted` を使う必要があります。
+
+`Update` は指定された TimestampID の entry だけを置き換え、TimestampID と他の entry を保持します。指定された TimestampID が存在しない場合は collection を変更せず、入力のコピーを返します。`Delete` は指定された TimestampID の entry だけを削除し、他の entry の順序と内容を保持します。指定された TimestampID が存在しない場合も collection の内容を変更せず、入力のコピーを返します。
+
+空の `Entries` は有効な collection です。`Sorted`、`Find`、`FindBy` は空の結果を返し、`Body` は空文字列を返します。空 collection への `Add` は一件の entry を含む collection を作り、`Update` と `Delete` は入力の内容を変えずに空 collection のコピーを返します。
+
+`Entry.DisplayTime` は TimestampID の `HH:MM` 表現を返し、`Entry.FirstLine` は text を newline で分けて最初の非空行を前後 trim した値を返します。text が空、または空白行だけの場合、`FirstLine` は空文字列を返します。これらは表示用の pure accessor であり、entry の text 自体を変更しません。
 
 ## 本文の validation
 
@@ -78,7 +94,7 @@ HHMMSSffffff
 時刻と list marker の検証対象は本文全体の先頭だけです。2 行目以降に
 時刻表記や list marker があっても reject しません。
 
-ただし、table row の一部として使われる separator は例外です。table として解釈できる行を、水平線だけを意図した入力と同じように reject してはいけません。
+ただし、table row の一部として使われる separator は例外です。table の header と区切り行を含む構造として解釈できる行は、水平線だけを意図した入力と同じように reject してはいけません。判定は行全体の構造に対して行い、table の内容を変更するために validation が入力を補正してはいけません。
 
 validation は入力を別の本文へ変換するものではありません。禁止される構造を見つけたら具体的な validation error を返し、入力 text 自体は保持します。
 
