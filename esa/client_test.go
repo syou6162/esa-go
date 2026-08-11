@@ -184,6 +184,38 @@ func TestHTTPErrorDetailsAndRedaction(t *testing.T) {
 	}
 }
 
+func TestTransportErrorRedactsPresignedURLAndPreservesCause(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/teams/example-team/attachments/policies" {
+			_, _ = io.WriteString(w, `{"attachment":{"endpoint":"`+srv.URL+`/upload?signature=upload-secret","url":"https://cdn.example.invalid/image"},"form":{}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	filePath := filepath.Join(t.TempDir(), "image.png")
+	if err := os.WriteFile(filePath, []byte("image-data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := NewClient("example-team", "dummy-token",
+		WithBaseURL(srv.URL),
+		WithHTTPClient(&http.Client{Transport: presignedErrorTransport{base: srv.Client().Transport}}),
+	)
+	_, err := client.UploadImage(context.Background(), filePath)
+	if err == nil {
+		t.Fatal("UploadImage: want transport error")
+	}
+	if strings.Contains(err.Error(), "upload-secret") || strings.Contains(err.Error(), "signature=") {
+		t.Fatalf("error leaked presigned URL: %v", err)
+	}
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		t.Fatalf("error = %T, want wrapped *url.Error", err)
+	}
+}
+
 func TestRedactSecretsSchemeLessQuery(t *testing.T) {
 	message := redactSecrets("request failed ?signature=fragment-secret")
 	if strings.Contains(message, "fragment-secret") || !strings.Contains(message, "?signature=[REDACTED]") {
@@ -470,6 +502,21 @@ func (t failingBodyTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(failingReader{})
 	return resp, nil
+}
+
+type presignedErrorTransport struct {
+	base http.RoundTripper
+}
+
+func (t presignedErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Path == "/upload" {
+		return nil, &url.Error{
+			Op:  req.Method,
+			URL: req.URL.String(),
+			Err: errors.New("connection refused"),
+		}
+	}
+	return t.base.RoundTrip(req)
 }
 
 type failingReader struct{}

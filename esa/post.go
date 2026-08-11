@@ -9,7 +9,7 @@ type Post struct {
 	BodyMD          string   `json:"body_md"`
 	BodyHTML        string   `json:"body_html"`
 	Tags            []string `json:"tags"`
-	Wip             bool     `json:"wip"`
+	WIP             bool     `json:"wip"`
 	Message         string   `json:"message"`
 	Kind            string   `json:"kind"`
 	URL             string   `json:"url"`

@@ -228,8 +228,8 @@ func (c *Client) postURL(postNumber int) string {
 	return fmt.Sprintf("%s/%d", c.postsURL(), postNumber)
 }
 
-// SearchByCategory returns the first post whose category exactly matches the
-// search result. It wraps ErrNotFound when no matching post is found.
+// SearchByCategory returns the first post returned by the category search.
+// It wraps ErrNotFound when the search result is empty.
 func (c *Client) SearchByCategory(ctx context.Context, category string) (*Post, error) {
 	op := fmt.Sprintf("esa.io search by category %q", category)
 	endpoint := c.postsURL()
@@ -245,7 +245,7 @@ func (c *Client) SearchByCategory(ctx context.Context, category string) (*Post, 
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s via %s: %w", op, safeURL(req.URL), err)
+		return nil, wrapTransportError(op, req.URL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -289,7 +289,7 @@ func (c *Client) SearchPosts(ctx context.Context, input SearchPostsInput) (*Sear
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s via %s: %w", op, safeURL(req.URL), err)
+		return nil, wrapTransportError(op, req.URL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -317,7 +317,7 @@ func (c *Client) GetPost(ctx context.Context, postNumber int) (*Post, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s via %s: %w", op, safeURL(req.URL), err)
+		return nil, wrapTransportError(op, req.URL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -456,7 +456,7 @@ func (c *Client) UploadImage(ctx context.Context, filePath string) (string, erro
 
 	policyResp, err := c.client.Do(policyReq)
 	if err != nil {
-		return "", fmt.Errorf("%s via %s: %w", policyOp, safeURL(policyReq.URL), err)
+		return "", wrapTransportError(policyOp, policyReq.URL, err)
 	}
 	defer policyResp.Body.Close()
 	if policyResp.StatusCode < 200 || policyResp.StatusCode >= 300 {
@@ -501,7 +501,7 @@ func (c *Client) UploadImage(ctx context.Context, filePath string) (string, erro
 
 	uploadResp, err := c.client.Do(uploadReq)
 	if err != nil {
-		return "", fmt.Errorf("%s via %s: %w", uploadOp, safeURL(uploadReq.URL), err)
+		return "", wrapTransportError(uploadOp, uploadReq.URL, err)
 	}
 	defer uploadResp.Body.Close()
 	if uploadResp.StatusCode != http.StatusOK && uploadResp.StatusCode != http.StatusCreated && uploadResp.StatusCode != http.StatusNoContent {
@@ -532,7 +532,7 @@ func (c *Client) doJSON(ctx context.Context, method, endpoint string, payload an
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s via %s: %w", op, safeURL(req.URL), err)
+		return nil, wrapTransportError(op, req.URL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -566,6 +566,26 @@ func (c *Client) notFoundStatusError(op string, endpoint *url.URL, resp *http.Re
 
 func readErrorBody(reader io.Reader) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(reader, 4096))
+}
+
+type transportError struct {
+	message string
+	cause   error
+}
+
+func (e *transportError) Error() string {
+	return e.message
+}
+
+func (e *transportError) Unwrap() error {
+	return e.cause
+}
+
+func wrapTransportError(op string, endpoint *url.URL, cause error) error {
+	return &transportError{
+		message: fmt.Sprintf("%s via %s: %s", op, safeURL(endpoint), redactSecrets(cause.Error())),
+		cause:   cause,
+	}
 }
 
 func safeURL(endpoint *url.URL) string {
