@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -428,10 +429,26 @@ func tagsOrEmpty(tags []string) []string {
 	return tags
 }
 
+func validateUploadImageInput(input UploadImageInput) error {
+	if input.Reader == nil {
+		return fmt.Errorf("image reader is required")
+	}
+	if input.FileName == "" {
+		return fmt.Errorf("image file name is required")
+	}
+	if input.Size <= 0 {
+		return fmt.Errorf("image size must be positive")
+	}
+	if input.ContentType == "" {
+		return fmt.Errorf("image content type is required")
+	}
+	return nil
+}
+
 // UploadImage uploads an image through esa's upload-policy flow.
 func (c *Client) UploadImage(ctx context.Context, input UploadImageInput) (string, error) {
-	if input.Reader == nil {
-		return "", fmt.Errorf("image reader is required")
+	if err := validateUploadImageInput(input); err != nil {
+		return "", err
 	}
 	policyPayload := map[string]any{
 		"type": input.ContentType,
@@ -616,4 +633,21 @@ func redactSecrets(message string) string {
 		return safeURL(parsed)
 	})
 	return secretQueryPattern.ReplaceAllString(message, "${1}[REDACTED]")
+}
+
+// DetectImageContentType returns the MIME type associated with an image file
+// name. Its result can be used to populate UploadImageInput.ContentType.
+func DetectImageContentType(fileName string) string {
+	switch strings.ToLower(filepath.Ext(fileName)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
 }

@@ -447,6 +447,50 @@ func TestUploadImage(t *testing.T) {
 	}
 }
 
+func TestUploadImageValidation(t *testing.T) {
+	client := NewClient("example-team", "dummy-token")
+	valid := UploadImageInput{
+		Reader: bytes.NewReader([]byte("image-data")), FileName: "image.png", Size: 10, ContentType: "image/png",
+	}
+	tests := []struct {
+		name  string
+		input UploadImageInput
+		want  string
+	}{
+		{name: "reader", input: UploadImageInput{FileName: valid.FileName, Size: valid.Size, ContentType: valid.ContentType}, want: "reader"},
+		{name: "file name", input: UploadImageInput{Reader: valid.Reader, Size: valid.Size, ContentType: valid.ContentType}, want: "file name"},
+		{name: "size", input: UploadImageInput{Reader: valid.Reader, FileName: valid.FileName, Size: 0, ContentType: valid.ContentType}, want: "size"},
+		{name: "content type", input: UploadImageInput{Reader: valid.Reader, FileName: valid.FileName, Size: valid.Size}, want: "content type"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := client.UploadImage(context.Background(), tt.input)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("UploadImage() error = %v, want %q", err, tt.want)
+			}
+			if strings.Contains(err.Error(), "https://") {
+				t.Fatalf("UploadImage() error contains URL: %v", err)
+			}
+		})
+	}
+}
+
+func TestDetectImageContentType(t *testing.T) {
+	tests := map[string]string{
+		"image.png":  "image/png",
+		"image.jpg":  "image/jpeg",
+		"image.jpeg": "image/jpeg",
+		"image.gif":  "image/gif",
+		"image.webp": "image/webp",
+		"image.bmp":  "application/octet-stream",
+	}
+	for fileName, want := range tests {
+		if got := DetectImageContentType(fileName); got != want {
+			t.Errorf("DetectImageContentType(%q) = %q, want %q", fileName, got, want)
+		}
+	}
+}
+
 func TestTeamNameAndOptions(t *testing.T) {
 	customClient := &http.Client{}
 	client := NewClient("example-team", "dummy-token", WithBaseURL("https://example.invalid/v1/"), WithHTTPClient(customClient))
