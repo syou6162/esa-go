@@ -22,6 +22,7 @@ func TestValidatePostTextIssues(t *testing.T) {
 		{"time", "15:30 memo", "時刻"},
 		{"list", "- item", "マークダウン"},
 		{"asterisk list", "* item", "マークダウン"},
+		{"middle dot", "・ item", "中黒"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,6 +56,53 @@ func TestValidatePostTextMultipleViolations(t *testing.T) {
 	issues := ValidatePostText("# heading\n---\n**bold**")
 	if len(issues) < 3 {
 		t.Fatalf("issues = %#v, want at least 3", issues)
+	}
+}
+
+func TestValidatePostTextMiddleDotScope(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"first line", "・ item", true},
+		{"second line", "heading\n・ item", true},
+		{"middle of line", "A・B", false},
+		{"leading whitespace", " ・ item", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues := ValidatePostText(tt.text)
+			hasMiddleDotIssue := false
+			for _, issue := range issues {
+				if strings.Contains(issue, "中黒") {
+					hasMiddleDotIssue = true
+					break
+				}
+			}
+			if hasMiddleDotIssue != tt.want {
+				t.Fatalf("issues = %#v, middle-dot issue = %v, want %v", issues, hasMiddleDotIssue, tt.want)
+			}
+		})
+	}
+
+	issues := ValidatePostText("・ item\n・ another\n# heading")
+	if len(issues) != 2 || !strings.Contains(issues[0], "見出し") && !strings.Contains(issues[1], "見出し") {
+		t.Fatalf("issues = %#v, want one heading issue and one middle-dot issue", issues)
+	}
+	middleDotCount := 0
+	for _, issue := range issues {
+		if strings.Contains(issue, "中黒") {
+			middleDotCount++
+		}
+	}
+	if middleDotCount != 1 {
+		t.Fatalf("issues = %#v, want one middle-dot issue for multiple matching lines", issues)
+	}
+
+	issues = ValidatePostText("・ item\n---\n# heading")
+	if len(issues) != 3 {
+		t.Fatalf("issues = %#v, want separator, heading, and middle-dot issues", issues)
 	}
 }
 

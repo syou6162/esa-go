@@ -17,6 +17,7 @@ func TestParsePostText(t *testing.T) {
 		{"parentheses", "text（value）", "バリデーションエラー: 全角括弧が使用されています。半角括弧を使ってください"},
 		{"leading time", "15:30 memo", "バリデーションエラー: 先頭（行頭）に時刻が含まれています。時刻はシステムが自動挿入するため不要です"},
 		{"leading list", "- item", "バリデーションエラー: 先頭（行頭）にマークダウンリスト記法(- / *)が使用されています。タイムスタンプ挿入でスタイルが崩れるため使用できません"},
+		{"leading middle dot", "・ item", "バリデーションエラー: 行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
