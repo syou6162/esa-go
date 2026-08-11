@@ -9,6 +9,8 @@ esa.io の REST client とラクガキ帳（scratchpad）のロジックを提�
 | `esa` | `github.com/syou6162/esa-go/esa` | esa.io REST client |
 | `scratchpad` | `github.com/syou6162/esa-go/scratchpad` | ラクガキ帳の本文フォーマットに関する純ロジック |
 
+設計方針は [`docs/design-guidelines.md`](docs/design-guidelines.md)、scratchpad の仕様は [`docs/scratchpad-spec.md`](docs/scratchpad-spec.md) にまとめています。
+
 ## ローカルでの検証
 
 ```bash

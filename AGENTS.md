@@ -26,6 +26,8 @@ go build ./...
 
 このライブラリは複数アプリから共通利用される public module です。以下を守ってください。
 
+詳細な設計方針は [`docs/design-guidelines.md`](docs/design-guidelines.md)、scratchpad の本文・validation 仕様は [`docs/scratchpad-spec.md`](docs/scratchpad-spec.md) を参照してください。
+
 1. **アプリ固有の固定値を埋め込まない**
    - team 名、カテゴリ prefix、投稿名などは、ライブラリの公開 API やデフォルト値に含めない
    - 許可タグの一覧（タグ名と説明）は利用側アプリの設定であり、このライブラリには一切持たせない。ライブラリは呼び出し側から引数またはオプションで受け取るだけにする
