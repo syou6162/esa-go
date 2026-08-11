@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var anchorRE = regexp.MustCompile(`(?s)^<a id="(\d+)" href="#(\d+)">[^<]+</a> (.*)`)
+var anchorRE = regexp.MustCompile(`(?s)^<a id="(\d+)" href="#\d+">[^<]+</a> (.*)`)
 
 // Entries is a collection of scratchpad entries.
 type Entries []Entry
@@ -29,14 +29,11 @@ func ParseEntries(bodyMD string) (Entries, error) {
 		if matches == nil {
 			return nil, fmt.Errorf("malformed scratchpad entry at block %d: does not match anchor format", i+1)
 		}
-		if matches[1] != matches[2] {
-			return nil, fmt.Errorf("malformed scratchpad entry at block %d: anchor ID and href differ", i+1)
-		}
 		timestampID, err := ParseTimestampID(matches[1])
 		if err != nil {
 			return nil, fmt.Errorf("malformed scratchpad entry at block %d: invalid timestamp ID: %w", i+1, err)
 		}
-		entries = append(entries, Entry{TimestampID: timestampID, Text: matches[3]})
+		entries = append(entries, Entry{TimestampID: timestampID, Text: matches[2]})
 	}
 	return entries, nil
 }

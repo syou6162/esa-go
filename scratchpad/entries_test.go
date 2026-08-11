@@ -41,9 +41,9 @@ func TestParseEntriesNormalizesLineEndingsAndRejectsMalformedBlocks(t *testing.T
 	if err == nil {
 		t.Fatal("invalid timestamp unexpectedly parsed")
 	}
-	_, err = ParseEntries(`<a id="153000000000" href="#150000000000">15:30</a> mismatched`)
-	if err == nil || !strings.Contains(err.Error(), "block 1") {
-		t.Fatalf("mismatched anchor error = %v", err)
+	entries, err = ParseEntries(`<a id="153000000000" href="#150000000001">15:30</a> mismatched`)
+	if err != nil || len(entries) != 1 || entries[0].TimestampID != "153000000000" {
+		t.Fatalf("mismatched anchor should parse: %#v, %v", entries, err)
 	}
 }
 

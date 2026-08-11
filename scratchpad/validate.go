@@ -10,8 +10,8 @@ import (
 var (
 	boldRE        = regexp.MustCompile(`\*\*[^*]+\*\*`)
 	headingRE     = regexp.MustCompile(`(?m)^#{1,6}\s`)
-	leadingTimeRE = regexp.MustCompile(`(?m)^(?:[01]?\d|2[0-3]):[0-5]\d`)
-	listMarkerRE  = regexp.MustCompile(`(?m)^[-*]\s`)
+	leadingTimeRE = regexp.MustCompile(`^(?:[01]?\d|2[0-3]):[0-5]\d`)
+	listMarkerRE  = regexp.MustCompile(`^[-*]\s`)
 )
 
 // ValidatePostText returns all validation issues found in post text.

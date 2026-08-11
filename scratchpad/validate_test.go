@@ -19,7 +19,7 @@ func TestValidatePostTextIssues(t *testing.T) {
 		{"colon", "key：value", "全角コロン"},
 		{"parentheses", "text（value）", "全角括弧"},
 		{"time", "15:30 memo", "時刻"},
-		{"list", "text\n- item", "マークダウン"},
+		{"list", "- item", "マークダウン"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestValidatePostTextIssues(t *testing.T) {
 }
 
 func TestValidatePostTextAllowsNormalText(t *testing.T) {
-	if issues := ValidatePostText("normal text\n  9:05 is indented"); len(issues) != 0 {
+	if issues := ValidatePostText("normal text\n- item\n12:30 is allowed here"); len(issues) != 0 {
 		t.Fatalf("issues = %#v", issues)
 	}
 }

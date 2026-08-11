@@ -72,8 +72,11 @@ HHMMSSffffff
 - Markdown bold syntax
 - 全角 colon
 - 全角 parentheses
-- 行頭の `HH:MM` のような時刻
-- 行頭の `- ` または `* ` の list marker
+- 本文全体の先頭（システムが anchor を連結する位置）の `HH:MM` のような時刻
+- 本文全体の先頭（システムが anchor を連結する位置）の `- ` または `* ` の list marker
+
+時刻と list marker の検証対象は本文全体の先頭だけです。2 行目以降に
+時刻表記や list marker があっても reject しません。
 
 ただし、table row の一部として使われる separator は例外です。table として解釈できる行を、水平線だけを意図した入力と同じように reject してはいけません。
 
@@ -98,7 +101,9 @@ scratchpad post のタイトルでは、次を reject します。
 
 ## anchor と entry URL
 
-anchor は TimestampID を `id` 属性と fragment link の両方に使います。表示部分は TimestampID の `HH:MM` 表現です。
+anchor は TimestampID を `id` 属性に使い、表示部分は TimestampID の
+`HH:MM` 表現です。parser は `id` から TimestampID を取り出し、`href` の
+fragment 値は検証しません。
 
 post URL と TimestampID から entry URL を作る場合は、次のように fragment を追加します。
 
