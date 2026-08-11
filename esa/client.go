@@ -9,8 +9,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -114,9 +112,17 @@ type PostBodyUpdater interface {
 	UpdatePostBodyOnly(ctx context.Context, input UpdatePostBodyOnlyInput) (*Post, error)
 }
 
+// UploadImageInput contains an image stream and its metadata.
+type UploadImageInput struct {
+	Reader      io.Reader
+	FileName    string
+	Size        int64
+	ContentType string
+}
+
 // ImageUploader uploads an image and returns its esa URL.
 type ImageUploader interface {
-	UploadImage(ctx context.Context, filePath string) (string, error)
+	UploadImage(ctx context.Context, input UploadImageInput) (string, error)
 }
 
 // TeamNamer provides the configured team name.
@@ -422,31 +428,22 @@ func tagsOrEmpty(tags []string) []string {
 	return tags
 }
 
-// UploadImage uploads a local image through esa's upload-policy flow.
-func (c *Client) UploadImage(ctx context.Context, filePath string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("open image %q: %w", filePath, err)
+// UploadImage uploads an image through esa's upload-policy flow.
+func (c *Client) UploadImage(ctx context.Context, input UploadImageInput) (string, error) {
+	if input.Reader == nil {
+		return "", fmt.Errorf("image reader is required")
 	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return "", fmt.Errorf("stat image %q: %w", filePath, err)
-	}
-
-	fileName := filepath.Base(filePath)
 	policyPayload := map[string]any{
-		"type": detectContentType(filePath),
-		"name": fileName,
-		"size": stat.Size(),
+		"type": input.ContentType,
+		"name": input.FileName,
+		"size": input.Size,
 	}
 	policyBody, err := json.Marshal(policyPayload)
 	if err != nil {
-		return "", fmt.Errorf("marshal policy request for image %q: %w", filePath, err)
+		return "", fmt.Errorf("marshal image upload policy request: %w", err)
 	}
 
-	policyOp := fmt.Sprintf("esa.io get upload policy for image %q", filePath)
+	policyOp := fmt.Sprintf("esa.io get upload policy for image %q", input.FileName)
 	policyReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.attachmentPoliciesURL(), bytes.NewReader(policyBody))
 	if err != nil {
 		return "", fmt.Errorf("%s: build request: %s", policyOp, redactSecrets(err.Error()))
@@ -478,21 +475,21 @@ func (c *Client) UploadImage(ctx context.Context, filePath string) (string, erro
 	writer := multipart.NewWriter(&body)
 	for key, value := range policyResult.Form {
 		if err := writer.WriteField(key, value); err != nil {
-			return "", fmt.Errorf("write form field %s for image %q: %w", key, filePath, err)
+			return "", fmt.Errorf("write form field %s for image %q: %w", key, input.FileName, err)
 		}
 	}
-	part, err := writer.CreateFormFile("file", fileName)
+	part, err := writer.CreateFormFile("file", input.FileName)
 	if err != nil {
-		return "", fmt.Errorf("create form file for image %q: %w", filePath, err)
+		return "", fmt.Errorf("create form file for image %q: %w", input.FileName, err)
 	}
-	if _, err := io.Copy(part, file); err != nil {
-		return "", fmt.Errorf("write file content for image %q: %w", filePath, err)
+	if _, err := io.Copy(part, input.Reader); err != nil {
+		return "", fmt.Errorf("write file content for image %q: %w", input.FileName, err)
 	}
 	if err := writer.Close(); err != nil {
-		return "", fmt.Errorf("close multipart writer for image %q: %w", filePath, err)
+		return "", fmt.Errorf("close multipart writer for image %q: %w", input.FileName, err)
 	}
 
-	uploadOp := fmt.Sprintf("esa.io upload image %q", filePath)
+	uploadOp := fmt.Sprintf("esa.io upload image %q", input.FileName)
 	uploadReq, err := http.NewRequestWithContext(ctx, http.MethodPost, policyResult.Attachment.Endpoint, &body)
 	if err != nil {
 		return "", fmt.Errorf("%s: build request: %s", uploadOp, redactSecrets(err.Error()))
@@ -619,19 +616,4 @@ func redactSecrets(message string) string {
 		return safeURL(parsed)
 	})
 	return secretQueryPattern.ReplaceAllString(message, "${1}[REDACTED]")
-}
-
-func detectContentType(filePath string) string {
-	switch strings.ToLower(filepath.Ext(filePath)) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	default:
-		return "application/octet-stream"
-	}
 }

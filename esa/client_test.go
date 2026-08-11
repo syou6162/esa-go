@@ -1,6 +1,7 @@
 package esa
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,8 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -195,15 +194,13 @@ func TestTransportErrorRedactsPresignedURLAndPreservesCause(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	filePath := filepath.Join(t.TempDir(), "image.png")
-	if err := os.WriteFile(filePath, []byte("image-data"), 0600); err != nil {
-		t.Fatal(err)
-	}
 	client := NewClient("example-team", "dummy-token",
 		WithBaseURL(srv.URL),
 		WithHTTPClient(&http.Client{Transport: presignedErrorTransport{base: srv.Client().Transport}}),
 	)
-	_, err := client.UploadImage(context.Background(), filePath)
+	_, err := client.UploadImage(context.Background(), UploadImageInput{
+		Reader: bytes.NewReader([]byte("image-data")), FileName: "image.png", Size: 10, ContentType: "image/png",
+	})
 	if err == nil {
 		t.Fatal("UploadImage: want transport error")
 	}
@@ -381,19 +378,26 @@ func TestUpdatePostNameValidation(t *testing.T) {
 
 func TestUploadImage(t *testing.T) {
 	var policyType string
+	var policyName string
+	var policySize int64
 	var uploadContentType string
 	var uploadedFile *multipart.FileHeader
+	var uploadedContent []byte
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/teams/example-team/attachments/policies":
 			var payload struct {
 				Type string `json:"type"`
+				Name string `json:"name"`
+				Size int64  `json:"size"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Error(err)
 			}
 			policyType = payload.Type
+			policyName = payload.Name
+			policySize = payload.Size
 			_, _ = io.WriteString(w, `{"attachment":{"endpoint":"`+srv.URL+`/upload?signature=upload-secret","url":"https://cdn.example.invalid/image"},"form":{"policy":"form-value"}}`)
 		case "/upload":
 			uploadContentType = r.Header.Get("Content-Type")
@@ -401,7 +405,12 @@ func TestUploadImage(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			_, uploadedFile, _ = r.FormFile("file")
+			var file multipart.File
+			file, uploadedFile, _ = r.FormFile("file")
+			if file != nil {
+				uploadedContent, _ = io.ReadAll(file)
+				_ = file.Close()
+			}
 			w.WriteHeader(http.StatusCreated)
 		default:
 			http.NotFound(w, r)
@@ -409,11 +418,9 @@ func TestUploadImage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	filePath := filepath.Join(t.TempDir(), "image.PNG")
-	if err := os.WriteFile(filePath, []byte("image-data"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	gotURL, err := testClient(srv).UploadImage(context.Background(), filePath)
+	gotURL, err := testClient(srv).UploadImage(context.Background(), UploadImageInput{
+		Reader: bytes.NewReader([]byte("image-data")), FileName: "image.PNG", Size: 10, ContentType: "image/png",
+	})
 	if err != nil {
 		t.Fatalf("UploadImage: %v", err)
 	}
@@ -423,23 +430,20 @@ func TestUploadImage(t *testing.T) {
 	if policyType != "image/png" {
 		t.Errorf("policy type = %q", policyType)
 	}
+	if policyName != "image.PNG" {
+		t.Errorf("policy name = %q", policyName)
+	}
+	if policySize != 10 {
+		t.Errorf("policy size = %d", policySize)
+	}
 	if uploadContentType == "" || !strings.HasPrefix(uploadContentType, "multipart/form-data; boundary=") {
 		t.Errorf("upload Content-Type = %q", uploadContentType)
 	}
 	if uploadedFile == nil || uploadedFile.Filename != "image.PNG" {
 		t.Fatalf("uploaded file = %#v", uploadedFile)
 	}
-}
-
-func TestDetectContentType(t *testing.T) {
-	tests := map[string]string{
-		"image.png": "image/png", "image.jpg": "image/jpeg", "image.jpeg": "image/jpeg",
-		"image.gif": "image/gif", "image.webp": "image/webp", "image.bmp": "application/octet-stream",
-	}
-	for path, want := range tests {
-		if got := detectContentType(path); got != want {
-			t.Errorf("detectContentType(%q) = %q, want %q", path, got, want)
-		}
+	if string(uploadedContent) != "image-data" {
+		t.Errorf("uploaded content = %q", uploadedContent)
 	}
 }
 
