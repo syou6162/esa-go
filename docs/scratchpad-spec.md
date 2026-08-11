@@ -45,7 +45,7 @@ HHMMSSffffff
 
 `time.Time` から生成する場合、時・分・秒はその値から取り、fractional part は nanosecond を microsecond に変換して 6 桁で表します。
 
-入力はちょうど 12 桁の ASCII 数字でなければなりません。時・分・秒の範囲外は reject します。TimestampID は parse 成功後に専用型として扱い、下流の処理で raw string を再検証しません。
+入力はちょうど 12 桁の ASCII 数字でなければなりません。時・分・秒の範囲外は reject します。TimestampID は opaque な値型で、`ParseTimestampID` または `NewTimestampIDFromTime` を経由してのみ生成できます。zero value は unset を表し、`String`、`DisplayTime`、`AnchorHTML` は空文字列を返します。TimestampID は parse 成功後に専用型として扱い、下流の処理で raw string を再検証しません。
 
 ### 一意性と衝突回避
 
@@ -72,8 +72,11 @@ HHMMSSffffff
 - Markdown bold syntax
 - 全角 colon
 - 全角 parentheses
-- 行頭の `HH:MM` のような時刻
-- 行頭の `- ` または `* ` の list marker
+- 本文全体の先頭（システムが anchor を連結する位置）の `HH:MM` のような時刻
+- 本文全体の先頭（システムが anchor を連結する位置）の `- ` または `* ` の list marker
+
+時刻と list marker の検証対象は本文全体の先頭だけです。2 行目以降に
+時刻表記や list marker があっても reject しません。
 
 ただし、table row の一部として使われる separator は例外です。table として解釈できる行を、水平線だけを意図した入力と同じように reject してはいけません。
 
@@ -98,7 +101,9 @@ scratchpad post のタイトルでは、次を reject します。
 
 ## anchor と entry URL
 
-anchor は TimestampID を `id` 属性と fragment link の両方に使います。表示部分は TimestampID の `HH:MM` 表現です。
+anchor は TimestampID を `id` 属性に使い、表示部分は TimestampID の
+`HH:MM` 表現です。parser は `id` から TimestampID を取り出し、`href` の
+fragment 値は検証しません。
 
 post URL と TimestampID から entry URL を作る場合は、次のように fragment を追加します。
 
