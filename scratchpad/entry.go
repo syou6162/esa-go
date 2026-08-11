@@ -34,6 +34,10 @@ func (e Entry) FirstLine() string {
 }
 
 // Body returns the anchor, a space, and the raw entry text.
+//
+// TimestampID must have been obtained from ParseTimestampID or
+// NewTimestampIDFromTime. Behavior for other values, including the zero
+// value, is undefined.
 func (e Entry) Body() string {
 	return e.AnchorHTML() + " " + e.Text
 }

@@ -7,6 +7,10 @@ import (
 )
 
 // TimestampID identifies an entry with HHMMSSffffff precision.
+//
+// Values must be obtained from ParseTimestampID or
+// NewTimestampIDFromTime. Behavior for other values, including the zero
+// value, is undefined.
 type TimestampID string
 
 // ParseTimestampID validates a 12-digit timestamp ID without trimming input.
@@ -48,12 +52,20 @@ func (id TimestampID) String() string {
 }
 
 // DisplayTime returns the timestamp's HH:MM display.
+//
+// The receiver must have been obtained from ParseTimestampID or
+// NewTimestampIDFromTime. Behavior for other values, including the zero
+// value, is undefined.
 func (id TimestampID) DisplayTime() string {
 	s := string(id)
 	return s[0:2] + ":" + s[2:4]
 }
 
 // AnchorHTML returns the HTML anchor for the timestamp ID.
+//
+// The receiver must have been obtained from ParseTimestampID or
+// NewTimestampIDFromTime. Behavior for other values, including the zero
+// value, is undefined.
 func (id TimestampID) AnchorHTML() string {
 	s := string(id)
 	return fmt.Sprintf(`<a id="%s" href="#%s">%s</a>`, s, s, id.DisplayTime())
@@ -65,6 +77,9 @@ func GenerateTimestampAnchor(t time.Time) string {
 }
 
 // EntryURL returns postURL#id, or an empty string if either input is empty.
+//
+// postURL must be a post URL without a fragment. The result is undefined when
+// postURL already contains a fragment.
 func EntryURL(postURL string, id TimestampID) string {
 	if postURL == "" || id == "" {
 		return ""
