@@ -42,7 +42,7 @@ func ValidatePostText(text string) []string {
 		issues = append(issues, "先頭（行頭）にマークダウンリスト記法(- / *)が使用されています。タイムスタンプ挿入でスタイルが崩れるため使用できません")
 	}
 	for _, line := range strings.Split(text, "\n") {
-		if strings.HasPrefix(line, "・") {
+		if strings.HasPrefix(strings.TrimLeftFunc(line, unicode.IsSpace), "・") {
 			issues = append(issues, "行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください")
 			break
 		}
