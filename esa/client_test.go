@@ -17,9 +17,11 @@ import (
 
 func TestSearchByCategory(t *testing.T) {
 	t.Run("found", func(t *testing.T) {
-		var gotQuery, gotAuth, gotPath string
+		var gotMethod, gotQuery, gotAuth, gotPath, gotPerPage string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
 			gotQuery = r.URL.Query().Get("q")
+			gotPerPage = r.URL.Query().Get("per_page")
 			gotAuth = r.Header.Get("Authorization")
 			gotPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
@@ -32,8 +34,14 @@ func TestSearchByCategory(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SearchByCategory: %v", err)
 		}
+		if gotMethod != http.MethodGet {
+			t.Errorf("method = %q, want GET", gotMethod)
+		}
 		if gotQuery != `category:"example/category/2025/05/03"` {
 			t.Errorf("q = %q", gotQuery)
+		}
+		if gotPerPage != "1" {
+			t.Errorf("per_page = %q, want 1", gotPerPage)
 		}
 		if gotAuth != "Bearer dummy-token" {
 			t.Errorf("Authorization = %q", gotAuth)
@@ -59,6 +67,31 @@ func TestSearchByCategory(t *testing.T) {
 		}
 		if post != nil {
 			t.Fatalf("post = %#v, want nil", post)
+		}
+	})
+
+	t.Run("non-2xx", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error":"unauthorized"}`)
+		}))
+		defer srv.Close()
+
+		_, err := testClient(srv).SearchByCategory(context.Background(), "example/category")
+		if err == nil || !strings.Contains(err.Error(), "status 401") {
+			t.Fatalf("err = %v, want status 401", err)
+		}
+	})
+
+	t.Run("decode error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, "{")
+		}))
+		defer srv.Close()
+
+		_, err := testClient(srv).SearchByCategory(context.Background(), "example/category")
+		if err == nil || !strings.Contains(err.Error(), "decode response") {
+			t.Fatalf("err = %v, want decode response", err)
 		}
 	})
 }
@@ -104,8 +137,9 @@ func TestSearchPostsValidation(t *testing.T) {
 
 func TestGetPost(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		var gotMethod, gotPath string
+		var gotAuth, gotMethod, gotPath string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
 			gotMethod = r.Method
 			gotPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
@@ -119,6 +153,9 @@ func TestGetPost(t *testing.T) {
 		}
 		if gotMethod != http.MethodGet || gotPath != "/teams/example-team/posts/99" {
 			t.Errorf("request = %s %s", gotMethod, gotPath)
+		}
+		if gotAuth != "Bearer dummy-token" {
+			t.Errorf("Authorization = %q", gotAuth)
 		}
 		if post.Number != 99 || post.Name != "example title" {
 			t.Fatalf("post = %#v", post)
@@ -156,6 +193,22 @@ func TestGetPost(t *testing.T) {
 		_, err := testClient(srv).GetPost(context.Background(), 7)
 		if err == nil || !strings.Contains(err.Error(), "get post 7") || !strings.Contains(err.Error(), "decode response") {
 			t.Fatalf("err = %v", err)
+		}
+	})
+
+	t.Run("non-404 non-2xx", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, `{"error":"internal"}`)
+		}))
+		defer srv.Close()
+
+		_, err := testClient(srv).GetPost(context.Background(), 500)
+		if err == nil || !strings.Contains(err.Error(), "status 500") {
+			t.Fatalf("err = %v, want status 500", err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			t.Fatalf("err = %v, want not ErrNotFound", err)
 		}
 	})
 }
@@ -280,6 +333,38 @@ func TestWritePayloads(t *testing.T) {
 		}
 	})
 
+	t.Run("create includes expected fields only", func(t *testing.T) {
+		var payload map[string]any
+		srv := httptest.NewServer(jsonCaptureHandler(&payload, `{"number":1}`))
+		defer srv.Close()
+
+		_, err := testClient(srv).CreatePost(context.Background(), CreatePostInput{
+			Name: "example title", Category: "example/category", BodyMD: "body",
+			Message: "create", Tags: []string{"tag-a"}, WIP: true,
+		})
+		if err != nil {
+			t.Fatalf("CreatePost: %v", err)
+		}
+		postPayload := payload["post"].(map[string]any)
+		for key, want := range map[string]any{
+			"name": "example title", "category": "example/category",
+			"body_md": "body", "message": "create", "wip": true,
+		} {
+			if postPayload[key] != want {
+				t.Errorf("%s = %#v, want %#v", key, postPayload[key], want)
+			}
+		}
+		tags, ok := postPayload["tags"].([]any)
+		if !ok || len(tags) != 1 || tags[0] != "tag-a" {
+			t.Errorf("tags = %#v, want [tag-a]", postPayload["tags"])
+		}
+		for _, forbidden := range []string{"number", "url", "body_md_extra"} {
+			if _, ok := postPayload[forbidden]; ok {
+				t.Errorf("payload = %#v, want no %s", postPayload, forbidden)
+			}
+		}
+	})
+
 	t.Run("update and body only", func(t *testing.T) {
 		var payloads []map[string]any
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -293,19 +378,39 @@ func TestWritePayloads(t *testing.T) {
 		defer srv.Close()
 
 		client := testClient(srv)
-		if _, err := client.UpdatePost(context.Background(), UpdatePostInput{PostNumber: 2, BodyMD: "body", Tags: nil}); err != nil {
+		if _, err := client.UpdatePost(context.Background(), UpdatePostInput{
+			PostNumber: 2, BodyMD: "body", Message: "update", Tags: nil,
+		}); err != nil {
 			t.Fatalf("UpdatePost: %v", err)
 		}
-		if _, err := client.UpdatePostBodyOnly(context.Background(), UpdatePostBodyOnlyInput{PostNumber: 2, BodyMD: "new body"}); err != nil {
+		if _, err := client.UpdatePostBodyOnly(context.Background(), UpdatePostBodyOnlyInput{
+			PostNumber: 2, BodyMD: "new body", Message: "body only",
+		}); err != nil {
 			t.Fatalf("UpdatePostBodyOnly: %v", err)
 		}
 		full := payloads[0]["post"].(map[string]any)
 		if _, ok := full["tags"].([]any); !ok {
 			t.Fatalf("tags = %#v, want array", full["tags"])
 		}
+		if full["body_md"] != "body" || full["message"] != "update" {
+			t.Fatalf("payload = %#v, want body and message", full)
+		}
+		for _, forbidden := range []string{"name", "category", "wip"} {
+			if _, ok := full[forbidden]; ok {
+				t.Fatalf("payload = %#v, want no %s", full, forbidden)
+			}
+		}
 		bodyOnly := payloads[1]["post"].(map[string]any)
 		if _, ok := bodyOnly["tags"]; ok {
 			t.Fatalf("body-only payload = %#v, want no tags", bodyOnly)
+		}
+		if bodyOnly["body_md"] != "new body" || bodyOnly["message"] != "body only" {
+			t.Fatalf("payload = %#v, want body and message", bodyOnly)
+		}
+		for _, forbidden := range []string{"name", "category", "wip"} {
+			if _, ok := bodyOnly[forbidden]; ok {
+				t.Fatalf("payload = %#v, want no %s", bodyOnly, forbidden)
+			}
 		}
 	})
 
@@ -326,6 +431,15 @@ func TestWritePayloads(t *testing.T) {
 		}
 		if _, ok := postPayload["tags"]; ok {
 			t.Fatalf("payload = %#v, want no tags", postPayload)
+		}
+		if postPayload["name"] != "new title" || postPayload["message"] != "rename" {
+			t.Fatalf("payload = %#v, want name and message", postPayload)
+		}
+		if postPayload["wip"] != false {
+			t.Fatalf("payload = %#v, want wip=false", postPayload)
+		}
+		if _, ok := postPayload["category"]; ok {
+			t.Fatalf("payload = %#v, want no category", postPayload)
 		}
 	})
 }
@@ -376,6 +490,145 @@ func TestUpdatePostNameValidation(t *testing.T) {
 		if _, err := client.UpdatePostName(context.Background(), input); err == nil {
 			t.Errorf("UpdatePostName(%+v): want error", input)
 		}
+	}
+}
+
+func TestUpdateTagsRequestContract(t *testing.T) {
+	var requests []struct {
+		method string
+		path   string
+		auth   string
+		body   map[string]any
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		requests = append(requests, struct {
+			method string
+			path   string
+			auth   string
+			body   map[string]any
+		}{r.Method, r.URL.Path, r.Header.Get("Authorization"), payload["post"].(map[string]any)})
+		_, _ = io.WriteString(w, `{"number":100}`)
+	}))
+	defer srv.Close()
+
+	client := testClient(srv)
+	for _, tags := range [][]string{{"tag-a"}, nil} {
+		if err := client.UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: tags}); err != nil {
+			t.Fatalf("UpdateTags(%v): %v", tags, err)
+		}
+	}
+	if len(requests) != 2 {
+		t.Fatalf("request count = %d, want 2", len(requests))
+	}
+	for i, request := range requests {
+		if request.method != http.MethodPatch || request.path != "/teams/example-team/posts/100" {
+			t.Errorf("request[%d] = %s %s", i, request.method, request.path)
+		}
+		if request.auth != "Bearer dummy-token" {
+			t.Errorf("Authorization[%d] = %q", i, request.auth)
+		}
+		if len(request.body) != 1 {
+			t.Errorf("payload[%d] = %#v, want only tags", i, request.body)
+		}
+		tags, ok := request.body["tags"].([]any)
+		if !ok {
+			t.Errorf("tags[%d] = %#v, want array", i, request.body["tags"])
+		}
+		if i == 0 && (len(tags) != 1 || tags[0] != "tag-a") {
+			t.Errorf("tags[%d] = %#v, want [tag-a]", i, tags)
+		}
+		if i == 1 && len(tags) != 0 {
+			t.Errorf("tags[%d] = %#v, want empty array", i, tags)
+		}
+		for _, forbidden := range []string{"name", "body_md", "message", "category"} {
+			if _, ok := request.body[forbidden]; ok {
+				t.Errorf("payload[%d] = %#v, want no %s", i, request.body, forbidden)
+			}
+		}
+	}
+}
+
+func TestUpdateTagsErrors(t *testing.T) {
+	t.Run("non-2xx", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, `{"error":"forbidden"}`)
+		}))
+		defer srv.Close()
+
+		err := testClient(srv).UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: []string{"tag-a"}})
+		if err == nil || !strings.Contains(err.Error(), "status 403") {
+			t.Fatalf("err = %v, want status 403", err)
+		}
+	})
+
+	t.Run("decode error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, "{")
+		}))
+		defer srv.Close()
+
+		err := testClient(srv).UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: []string{"tag-a"}})
+		if err == nil || !strings.Contains(err.Error(), "decode response") {
+			t.Fatalf("err = %v, want decode response", err)
+		}
+	})
+}
+
+func TestWriteOperationsRejectInvalidPostNumbers(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	client := testClient(srv)
+	for _, number := range []int{0, -1} {
+		tests := []struct {
+			name string
+			call func() error
+		}{
+			{
+				name: "UpdatePost",
+				call: func() error {
+					_, err := client.UpdatePost(context.Background(), UpdatePostInput{PostNumber: number, BodyMD: "body"})
+					return err
+				},
+			},
+			{
+				name: "UpdatePostBodyOnly",
+				call: func() error {
+					_, err := client.UpdatePostBodyOnly(context.Background(), UpdatePostBodyOnlyInput{PostNumber: number, BodyMD: "body"})
+					return err
+				},
+			},
+			{
+				name: "UpdatePostName",
+				call: func() error {
+					_, err := client.UpdatePostName(context.Background(), UpdatePostNameInput{PostNumber: number, Name: "title"})
+					return err
+				},
+			},
+			{
+				name: "UpdateTags",
+				call: func() error {
+					return client.UpdateTags(context.Background(), UpdateTagsInput{PostNumber: number, Tags: []string{"tag-a"}})
+				},
+			},
+		}
+		for _, tt := range tests {
+			if err := tt.call(); err == nil {
+				t.Errorf("%s(%d): want error", tt.name, number)
+			}
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("request count = %d, want 0", requests)
 	}
 }
 
