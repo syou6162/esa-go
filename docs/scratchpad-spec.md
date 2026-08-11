@@ -95,6 +95,31 @@ scratchpad post のタイトルでは、次を reject します。
 
 タイトルの文字種や固定の名称は利用側アプリケーションが決めます。esa-go は特定の team、カテゴリ prefix、記事名を既定値として持ちません。
 
+## 入力型と parse 経路
+
+本文とタイトルは、validation 済みの opaque な値型として扱います。
+
+- `PostText` は `ParsePostText` の成功後にだけ生成できます。
+- `PostTitle` は `ParsePostTitle` の成功後にだけ生成できます。
+- raw string が必要な場合は、それぞれの `String()` を使います。
+- zero value は unset を表し、`String()` は空文字列を返します。空入力を受理した成功値と混同してはいけません。
+- `PostText` と `PostTitle` は比較可能な値型で、`==` 比較と map key に使えます。
+
+`ParsePostText` は空文字列を reject し、本文 validation の全ての問題を
+`*ValidationError` として返します。`ParsePostTitle` は空文字列と前後の空白を
+reject した上で、タイトル validation を行います。parse 済みの値を下流で raw
+string に戻して再検証することはしません。
+
+タグと記事番号も、esa package の opaque な parse 済み型として扱います。
+
+- `Tag` は `ParseTag` の成功後にだけ生成でき、空文字列と前後の空白を reject します。
+- `PostNumber` は `ParsePostNumber` の成功後にだけ生成でき、正の整数だけを受理します。
+- raw tag は `Tag.String()`、記事番号は `PostNumber.Int()` で取得します。
+- いずれも opaque な比較可能な値型で、`==` 比較と map key に使えます。
+
+これらの parser は空入力や不正入力を zero value に変換せず、型付き
+validation error として返します。
+
 ## 文字数制限
 
 現在の本文・タイトル validation の実装と仕様には、文字数の上限・下限を設けていません。長さ制限を追加する場合は、既存の validation と別の仕様変更として明示してください。
