@@ -3,7 +3,7 @@ package scratchpad
 import "testing"
 
 func TestEntryMethods(t *testing.T) {
-	entry := Entry{TimestampID: "153000000000", Text: "\n  first line  \nsecond line"}
+	entry := Entry{TimestampID: mustParseTimestampID(t, "153000000000"), Text: "\n  first line  \nsecond line"}
 	if entry.ID() != "153000000000" {
 		t.Fatalf("ID() = %q", entry.ID())
 	}
@@ -26,11 +26,17 @@ func TestEntryMethods(t *testing.T) {
 	if !entry.IsSameTimestampID(entry.TimestampID) {
 		t.Fatal("IsSameTimestampID() = false")
 	}
-	if entry.IsSameTimestamp(Entry{TimestampID: "160000000000"}) {
+	if entry.IsSameTimestamp(Entry{TimestampID: mustParseTimestampID(t, "160000000000")}) {
 		t.Fatal("IsSameTimestamp() = true for different timestamp")
 	}
-	if entry.IsSameTimestampID("160000000000") {
+	if entry.IsSameTimestampID(mustParseTimestampID(t, "160000000000")) {
 		t.Fatal("IsSameTimestampID() = true for different timestamp")
+	}
+}
+
+func TestEntryBodyWithZeroTimestampID(t *testing.T) {
+	if got := (Entry{Text: "text"}).Body(); got != " text" {
+		t.Fatalf("Body() with zero TimestampID = %q, want %q", got, " text")
 	}
 }
 

@@ -45,7 +45,7 @@ HHMMSSffffff
 
 `time.Time` から生成する場合、時・分・秒はその値から取り、fractional part は nanosecond を microsecond に変換して 6 桁で表します。
 
-入力はちょうど 12 桁の ASCII 数字でなければなりません。時・分・秒の範囲外は reject します。TimestampID は parse 成功後に専用型として扱い、下流の処理で raw string を再検証しません。
+入力はちょうど 12 桁の ASCII 数字でなければなりません。時・分・秒の範囲外は reject します。TimestampID は opaque な値型で、`ParseTimestampID` または `NewTimestampIDFromTime` を経由してのみ生成できます。zero value は unset を表し、`String`、`DisplayTime`、`AnchorHTML` は空文字列を返します。TimestampID は parse 成功後に専用型として扱い、下流の処理で raw string を再検証しません。
 
 ### 一意性と衝突回避
 

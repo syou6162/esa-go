@@ -59,7 +59,7 @@ func (e Entries) Sorted() Entries {
 	result := make(Entries, len(e))
 	copy(result, e)
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].TimestampID > result[j].TimestampID
+		return result[i].TimestampID.value > result[j].TimestampID.value
 	})
 	return result
 }
@@ -99,7 +99,7 @@ func (e Entries) Add(entry Entry) Entries {
 			result[i] = entry
 			return result
 		}
-		if existing.TimestampID < entry.TimestampID {
+		if existing.TimestampID.value < entry.TimestampID.value {
 			result := make(Entries, len(e)+1)
 			copy(result, e[:i])
 			result[i] = entry
@@ -153,9 +153,9 @@ func (e Entries) MakeUniqueTimestamp(ts TimestampID) (TimestampID, error) {
 	if !used(ts) {
 		return ts, nil
 	}
-	base, err := strconv.ParseUint(string(ts), 10, 64)
+	base, err := strconv.ParseUint(ts.String(), 10, 64)
 	if err != nil {
-		return "", fmt.Errorf("parse timestamp ID %q: %w", ts, err)
+		return TimestampID{}, fmt.Errorf("parse timestamp ID %q: %w", ts.String(), err)
 	}
 	for offset := uint64(1); offset <= 999999; offset++ {
 		candidateStr := fmt.Sprintf("%012d", base+offset)
@@ -167,5 +167,5 @@ func (e Entries) MakeUniqueTimestamp(ts TimestampID) (TimestampID, error) {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("no unique timestamp found within search limit for %q", ts)
+	return TimestampID{}, fmt.Errorf("no unique timestamp found within search limit for %q", ts.String())
 }

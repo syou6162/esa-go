@@ -35,9 +35,9 @@ func (e Entry) FirstLine() string {
 
 // Body returns the anchor, a space, and the raw entry text.
 //
-// TimestampID must have been obtained from ParseTimestampID or
-// NewTimestampIDFromTime. Behavior for other values, including the zero
-// value, is undefined.
+// A zero-value TimestampID produces an empty anchor followed by a space and
+// the raw text. Serializing such an Entry is a caller programming error; the
+// empty anchor is not a fallback representation.
 func (e Entry) Body() string {
 	return e.AnchorHTML() + " " + e.Text
 }
