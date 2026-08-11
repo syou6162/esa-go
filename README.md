@@ -1,8 +1,6 @@
 # esa-go
 
-esa.io REST client とラクガキ帳（scratchpad）の共通 Go module です。
-
-[`syou6162/times-agent-talk`](https://github.com/syou6162/times-agent-talk)（Slack bot）と [`syou6162/stackchan-mcp`](https://github.com/syou6162/stackchan-mcp)（MCP server）の両方で重複していた esa.io 連携とラクガキ帳ロジックを一本化するために作成しました。両アプリから import される public module です。
+esa.io の REST client とラクガキ帳（scratchpad）のロジックを提供する Go module です。
 
 将来 `esa-rs` / `esa-py` など他言語向けの実装が増える想定で、リポジトリ名に `-go` が付いています。
 
