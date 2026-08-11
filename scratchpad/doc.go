@@ -1,4 +1,8 @@
-// Package scratchpad provides pure logic for the scratchpad (ラクガキ帳) feature.
+// Package scratchpad provides pure logic for timestamped Markdown entries.
 //
-// Implementation will be added in future releases.
+// It defines TimestampID, Entry, and Entries together with parsing,
+// serialization, ordering, collision avoidance, and text/title validation.
+// ValidationError and ErrEntryNotFound provide machine-checkable error
+// contracts; application-specific post, date, tag, and concurrency policy is
+// outside this package.
 package scratchpad

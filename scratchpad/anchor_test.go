@@ -1,0 +1,77 @@
+package scratchpad
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestTimestampIDParsingAndDisplay(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		ok    bool
+	}{
+		{"valid", "000000000000", true},
+		{"boundary", "235959999999", true},
+		{"short", "12345", false},
+		{"long", "1530000000000", false},
+		{"hours", "240000000000", false},
+		{"minutes", "126000000000", false},
+		{"seconds", "125960000000", false},
+		{"non-digits", "12ab56789012", false},
+		{"leading whitespace", " 153000000000", false},
+		{"trailing whitespace", "153000000000 ", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseTimestampID(tt.value)
+			if tt.ok {
+				if err != nil || got.String() != tt.value {
+					t.Fatalf("ParseTimestampID(%q) = %q, %v", tt.value, got, err)
+				}
+				if got.DisplayTime() != tt.value[:2]+":"+tt.value[2:4] {
+					t.Fatalf("DisplayTime() = %q", got.DisplayTime())
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ParseTimestampID(%q) succeeded", tt.value)
+			}
+		})
+	}
+}
+
+func TestTimestampIDFromTimeAndAnchor(t *testing.T) {
+	id := NewTimestampIDFromTime(time.Date(2025, 1, 15, 13, 45, 30, 123456000, time.UTC))
+	if id != "134530123456" {
+		t.Fatalf("id = %q", id)
+	}
+	want := `<a id="134530123456" href="#134530123456">13:45</a>`
+	if got := id.AnchorHTML(); got != want {
+		t.Fatalf("AnchorHTML() = %q, want %q", got, want)
+	}
+	if got := GenerateTimestampAnchor(time.Date(2025, 1, 15, 13, 45, 30, 123456000, time.UTC)); got != want {
+		t.Fatalf("GenerateTimestampAnchor() = %q, want %q", got, want)
+	}
+}
+
+func TestEntryURL(t *testing.T) {
+	id := TimestampID("153000000000")
+	if got := EntryURL("https://example.invalid/posts/1", id); got != "https://example.invalid/posts/1#153000000000" {
+		t.Fatalf("EntryURL() = %q", got)
+	}
+	if got := EntryURL("", id); got != "" {
+		t.Fatalf("EntryURL(empty URL) = %q", got)
+	}
+	if got := EntryURL("https://example.invalid/posts/1", ""); got != "" {
+		t.Fatalf("EntryURL(empty ID) = %q", got)
+	}
+}
+
+func TestAnchorHTMLHasMatchingIDAndHref(t *testing.T) {
+	anchor := TimestampID("153000000000").AnchorHTML()
+	if !strings.Contains(anchor, `id="153000000000"`) || !strings.Contains(anchor, `href="#153000000000"`) {
+		t.Fatalf("anchor = %q", anchor)
+	}
+}
