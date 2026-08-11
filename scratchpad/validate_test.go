@@ -22,6 +22,7 @@ func TestValidatePostTextIssues(t *testing.T) {
 		{"time", "15:30 memo", "時刻"},
 		{"list", "- item", "マークダウン"},
 		{"asterisk list", "* item", "マークダウン"},
+		{"middle dot", "・ item", "中黒"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,6 +56,63 @@ func TestValidatePostTextMultipleViolations(t *testing.T) {
 	issues := ValidatePostText("# heading\n---\n**bold**")
 	if len(issues) < 3 {
 		t.Fatalf("issues = %#v, want at least 3", issues)
+	}
+}
+
+func TestValidatePostTextMiddleDotScope(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"first line", "・ item", true},
+		{"second line", "heading\n・ item", true},
+		{"middle of line", "A・B", false},
+		{"leading whitespace", " ・ item", true},
+		{"leading tab", "\t・ item", true},
+		{"leading fullwidth whitespace", "　・ item", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues := ValidatePostText(tt.text)
+			hasMiddleDotIssue := false
+			for _, issue := range issues {
+				if strings.Contains(issue, "中黒") {
+					hasMiddleDotIssue = true
+					break
+				}
+			}
+			if hasMiddleDotIssue != tt.want {
+				t.Fatalf("issues = %#v, middle-dot issue = %v, want %v", issues, hasMiddleDotIssue, tt.want)
+			}
+		})
+	}
+
+}
+
+func TestValidatePostTextMiddleDotReportsOneIssueForMultipleLines(t *testing.T) {
+	issues := ValidatePostText("・ item\n・ another")
+	if len(issues) != 1 || !strings.Contains(issues[0], "中黒") {
+		t.Fatalf("issues = %#v, want one middle-dot issue", issues)
+	}
+}
+
+func TestValidatePostTextMiddleDotCombinesWithOtherIssues(t *testing.T) {
+	issues := ValidatePostText("・ item\n---\n# heading")
+	if len(issues) != 3 {
+		t.Fatalf("issues = %#v, want separator, heading, and middle-dot issues", issues)
+	}
+	for _, want := range []string{"区切り", "見出し", "中黒"} {
+		found := false
+		for _, issue := range issues {
+			if strings.Contains(issue, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("issues = %#v, want issue containing %q", issues, want)
+		}
 	}
 }
 
