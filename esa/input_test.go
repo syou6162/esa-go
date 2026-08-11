@@ -53,6 +53,22 @@ func TestTagZeroValueAndComparable(t *testing.T) {
 	}
 }
 
+func TestNewValidationErrorCopiesIssues(t *testing.T) {
+	issues := []string{"タグが空です", "別の問題"}
+	err := NewValidationError(issues)
+	issues[0] = "変更された問題"
+
+	if err.Message != "バリデーションエラー: タグが空です; 別の問題" {
+		t.Fatalf("Message = %q", err.Message)
+	}
+	if err.Error() != err.Message {
+		t.Fatalf("Error() = %q, want Message %q", err.Error(), err.Message)
+	}
+	if err.Issues[0] != "タグが空です" {
+		t.Fatalf("Issues = %#v", err.Issues)
+	}
+}
+
 func TestParsePostNumber(t *testing.T) {
 	for _, raw := range []int{0, -1} {
 		_, err := ParsePostNumber(raw)

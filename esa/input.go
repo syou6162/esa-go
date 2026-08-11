@@ -21,10 +21,10 @@ func (t Tag) String() string {
 // ParseTag validates and parses an esa post tag.
 func ParseTag(raw string) (Tag, error) {
 	if raw == "" {
-		return Tag{}, NewValidationError("タグが空です")
+		return Tag{}, NewValidationError([]string{"タグが空です"})
 	}
 	if strings.TrimSpace(raw) != raw {
-		return Tag{}, NewValidationError("タグの前後に空白は使用できません")
+		return Tag{}, NewValidationError([]string{"タグの前後に空白は使用できません"})
 	}
 	return Tag{value: raw}, nil
 }
@@ -46,7 +46,7 @@ func (n PostNumber) Int() int {
 func ParsePostNumber(raw int) (PostNumber, error) {
 	if raw <= 0 {
 		return PostNumber{}, NewValidationError(
-			fmt.Sprintf("記事番号は正の整数である必要があります (post_number=%d)", raw),
+			[]string{fmt.Sprintf("記事番号は正の整数である必要があります (post_number=%d)", raw)},
 		)
 	}
 	return PostNumber{value: raw}, nil
