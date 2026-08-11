@@ -6,10 +6,9 @@ import "strings"
 //
 // A category is below a prefix only when the boundary is a slash, so
 // "notes-old" does not match "notes". The prefix itself is considered a
-// match. Trailing slashes in prefix are ignored. An empty prefix matches
-// nothing, including an empty category.
+// match. Callers must provide a category path without a trailing slash as
+// prefix. An empty prefix matches nothing, including an empty category.
 func CategoryMatchesPrefix(category, prefix string) bool {
-	prefix = strings.TrimRight(prefix, "/")
 	if prefix == "" {
 		return false
 	}

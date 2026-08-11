@@ -55,13 +55,13 @@ func TestCategoryMatchesPrefix(t *testing.T) {
 			name:     "trailing slash in prefix",
 			category: "notes/2026/08/11",
 			prefix:   "notes/",
-			want:     true,
+			want:     false,
 		},
 		{
 			name:     "trailing slash exact category",
 			category: "notes",
 			prefix:   "notes/",
-			want:     true,
+			want:     false,
 		},
 		{
 			name:     "japanese category",
