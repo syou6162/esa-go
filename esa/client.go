@@ -88,7 +88,9 @@ func WithHTTPClient(httpClient *http.Client) Option {
 // WithBaseURL replaces the API base URL used by Client.
 func WithBaseURL(baseURL string) Option {
 	return func(c *Client) {
-		c.baseURL = strings.TrimRight(baseURL, "/")
+		if baseURL != "" {
+			c.baseURL = strings.TrimRight(baseURL, "/")
+		}
 	}
 }
 
@@ -215,17 +217,19 @@ func teamPath(teamName string) string {
 }
 
 func (c *Client) postsURL() string {
-	return fmt.Sprintf("%s/teams/%s/posts", strings.TrimRight(c.baseURL, "/"), teamPath(c.teamName))
+	return fmt.Sprintf("%s/teams/%s/posts", c.baseURL, teamPath(c.teamName))
 }
 
 func (c *Client) attachmentPoliciesURL() string {
-	return fmt.Sprintf("%s/teams/%s/attachments/policies", strings.TrimRight(c.baseURL, "/"), teamPath(c.teamName))
+	return fmt.Sprintf("%s/teams/%s/attachments/policies", c.baseURL, teamPath(c.teamName))
 }
 
 func (c *Client) postURL(postNumber int) string {
 	return fmt.Sprintf("%s/%d", c.postsURL(), postNumber)
 }
 
+// SearchByCategory returns the first post whose category exactly matches the
+// search result. It wraps ErrNotFound when no matching post is found.
 func (c *Client) SearchByCategory(ctx context.Context, category string) (*Post, error) {
 	op := fmt.Sprintf("esa.io search by category %q", category)
 	endpoint := c.postsURL()
@@ -261,6 +265,7 @@ func (c *Client) SearchByCategory(ctx context.Context, category string) (*Post, 
 	return &result.Posts[0], nil
 }
 
+// SearchPosts searches posts using the supplied query and pagination options.
 func (c *Client) SearchPosts(ctx context.Context, input SearchPostsInput) (*SearchResult, error) {
 	input, err := normalizeSearchPostsInput(input)
 	if err != nil {
@@ -298,6 +303,7 @@ func (c *Client) SearchPosts(ctx context.Context, input SearchPostsInput) (*Sear
 	return &result, nil
 }
 
+// GetPost retrieves a post by number and wraps ErrNotFound for HTTP 404.
 func (c *Client) GetPost(ctx context.Context, postNumber int) (*Post, error) {
 	if err := validatePostNumber(postNumber); err != nil {
 		return nil, fmt.Errorf("esa.io get post %d: invalid input: %w", postNumber, err)
@@ -328,6 +334,7 @@ func (c *Client) GetPost(ctx context.Context, postNumber int) (*Post, error) {
 	return &post, nil
 }
 
+// CreatePost creates a post, including its body, tags, message, and WIP flag.
 func (c *Client) CreatePost(ctx context.Context, in CreatePostInput) (*Post, error) {
 	if err := validateCreatePostInput(in); err != nil {
 		return nil, fmt.Errorf("esa.io create post: invalid input: %w", err)
@@ -346,6 +353,7 @@ func (c *Client) CreatePost(ctx context.Context, in CreatePostInput) (*Post, err
 	return c.postJSON(ctx, c.postsURL(), payload, op)
 }
 
+// UpdatePost updates a post body and tags together.
 func (c *Client) UpdatePost(ctx context.Context, in UpdatePostInput) (*Post, error) {
 	if err := validatePostNumber(in.PostNumber); err != nil {
 		return nil, fmt.Errorf("esa.io update post %d: invalid input: %w", in.PostNumber, err)
@@ -361,6 +369,7 @@ func (c *Client) UpdatePost(ctx context.Context, in UpdatePostInput) (*Post, err
 	return c.patchJSON(ctx, c.postURL(in.PostNumber), payload, op)
 }
 
+// UpdatePostBodyOnly updates only the body and message; it does not send tags.
 func (c *Client) UpdatePostBodyOnly(ctx context.Context, in UpdatePostBodyOnlyInput) (*Post, error) {
 	if err := validatePostNumber(in.PostNumber); err != nil {
 		return nil, fmt.Errorf("esa.io update post %d body only: invalid input: %w", in.PostNumber, err)
@@ -375,6 +384,7 @@ func (c *Client) UpdatePostBodyOnly(ctx context.Context, in UpdatePostBodyOnlyIn
 	return c.patchJSON(ctx, c.postURL(in.PostNumber), payload, op)
 }
 
+// UpdatePostName updates a post name and sends wip=false without body or tags.
 func (c *Client) UpdatePostName(ctx context.Context, in UpdatePostNameInput) (*Post, error) {
 	if err := validateUpdatePostNameInput(in); err != nil {
 		return nil, fmt.Errorf("esa.io update post %d name=%q: invalid input: %w", in.PostNumber, in.Name, err)
@@ -390,6 +400,7 @@ func (c *Client) UpdatePostName(ctx context.Context, in UpdatePostNameInput) (*P
 	return c.patchJSON(ctx, c.postURL(in.PostNumber), payload, op)
 }
 
+// UpdateTags replaces the tags on an existing post.
 func (c *Client) UpdateTags(ctx context.Context, in UpdateTagsInput) error {
 	if err := validatePostNumber(in.PostNumber); err != nil {
 		return fmt.Errorf("esa.io update tags post %d: invalid input: %w", in.PostNumber, err)
@@ -411,6 +422,7 @@ func tagsOrEmpty(tags []string) []string {
 	return tags
 }
 
+// UploadImage uploads a local image through esa's upload-policy flow.
 func (c *Client) UploadImage(ctx context.Context, filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -574,6 +586,8 @@ var (
 	urlPattern         = regexp.MustCompile(`https?://[^\s"'()\[\]{},]+`)
 )
 
+// URL redaction removes complete query strings; the fragment pattern below
+// also protects scheme-less query fragments that are not recognized as URLs.
 func redactSecrets(message string) string {
 	message = bearerTokenPattern.ReplaceAllString(message, "Bearer [REDACTED]")
 	message = authHeaderPattern.ReplaceAllString(message, "Authorization: [REDACTED]")

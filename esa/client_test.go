@@ -184,6 +184,13 @@ func TestHTTPErrorDetailsAndRedaction(t *testing.T) {
 	}
 }
 
+func TestRedactSecretsSchemeLessQuery(t *testing.T) {
+	message := redactSecrets("request failed ?signature=fragment-secret")
+	if strings.Contains(message, "fragment-secret") || !strings.Contains(message, "?signature=[REDACTED]") {
+		t.Fatalf("redacted message = %q", message)
+	}
+}
+
 func TestHTTPErrorBodyLimit(t *testing.T) {
 	largeBody := strings.Repeat("x", 8192)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -289,6 +296,24 @@ func TestWritePayloads(t *testing.T) {
 			t.Fatalf("payload = %#v, want no tags", postPayload)
 		}
 	})
+}
+
+func TestCreatePostWIPPropagation(t *testing.T) {
+	var payload map[string]any
+	srv := httptest.NewServer(jsonCaptureHandler(&payload, `{"number":1}`))
+	defer srv.Close()
+
+	client := testClient(srv)
+	for _, want := range []bool{true, false} {
+		_, err := client.CreatePost(context.Background(), CreatePostInput{Name: "title", WIP: want})
+		if err != nil {
+			t.Fatalf("CreatePost(WIP=%t): %v", want, err)
+		}
+		postPayload := payload["post"].(map[string]any)
+		if got := postPayload["wip"]; got != want {
+			t.Errorf("wip = %v, want %t", got, want)
+		}
+	}
 }
 
 func TestWriteRequestMetadata(t *testing.T) {
@@ -397,6 +422,11 @@ func TestTeamNameAndOptions(t *testing.T) {
 	}
 	if client.client != customClient {
 		t.Error("WithHTTPClient did not install client")
+	}
+
+	defaultBase := NewClient("example-team", "dummy-token", WithBaseURL(""))
+	if defaultBase.baseURL != defaultBaseURL {
+		t.Errorf("empty baseURL option changed base URL to %q", defaultBase.baseURL)
 	}
 }
 
