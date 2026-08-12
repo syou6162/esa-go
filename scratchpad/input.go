@@ -20,7 +20,7 @@ func ParsePostText(raw string) (PostText, error) {
 	if raw == "" {
 		return PostText{}, NewValidationError([]string{"本文が空です"})
 	}
-	if issues := ValidatePostText(raw); len(issues) > 0 {
+	if issues := validatePostText(raw); len(issues) > 0 {
 		return PostText{}, NewValidationError(issues)
 	}
 	return PostText{value: raw}, nil
@@ -47,7 +47,7 @@ func ParsePostTitle(raw string) (PostTitle, error) {
 	if strings.TrimSpace(raw) != raw {
 		return PostTitle{}, NewValidationError([]string{"タイトルの前後に空白は使用できません"})
 	}
-	if issues := ValidateScratchpadTitle(raw); len(issues) > 0 {
+	if issues := validateScratchpadTitle(raw); len(issues) > 0 {
 		return PostTitle{}, NewValidationError(issues)
 	}
 	return PostTitle{value: raw}, nil
