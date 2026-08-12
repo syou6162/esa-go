@@ -12,12 +12,15 @@ func TestParsePostText(t *testing.T) {
 		{"empty", "", "バリデーションエラー: 本文が空です"},
 		{"separator", "text\n---", "バリデーションエラー: 区切り線(---)が含まれています"},
 		{"heading", "# heading", "バリデーションエラー: Markdown見出し(#)が使用されています"},
+		{"heading on second line", "text\n### heading", "バリデーションエラー: Markdown見出し(#)が使用されています"},
 		{"bold", "**bold**", "バリデーションエラー: ボールド体(**テキスト**)が使用されています"},
 		{"colon", "key：value", "バリデーションエラー: 全角コロン(：)が使用されています。半角コロン(:)を使ってください"},
 		{"parentheses", "text（value）", "バリデーションエラー: 全角括弧が使用されています。半角括弧を使ってください"},
 		{"leading time", "15:30 memo", "バリデーションエラー: 先頭（行頭）に時刻が含まれています。時刻はシステムが自動挿入するため不要です"},
 		{"leading list", "- item", "バリデーションエラー: 先頭（行頭）にマークダウンリスト記法(- / *)が使用されています。タイムスタンプ挿入でスタイルが崩れるため使用できません"},
+		{"leading asterisk list", "* item", "バリデーションエラー: 先頭（行頭）にマークダウンリスト記法(- / *)が使用されています。タイムスタンプ挿入でスタイルが崩れるため使用できません"},
 		{"leading middle dot", "・ item", "バリデーションエラー: 行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください"},
+		{"indented middle dot", "heading\n　・ item", "バリデーションエラー: 行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,6 +36,14 @@ func TestParsePostText(t *testing.T) {
 				t.Fatalf("error = %q, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestParsePostTextCombinesValidationIssues(t *testing.T) {
+	_, err := ParsePostText("・ item\n---\n# heading")
+	const want = "バリデーションエラー: 区切り線(---)が含まれています; Markdown見出し(#)が使用されています; 行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください"
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 }
 

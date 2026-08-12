@@ -1,7 +1,6 @@
 package scratchpad
 
 import (
-	"errors"
 	"strings"
 	"testing"
 )
@@ -26,7 +25,7 @@ func TestValidatePostTextIssues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			issues := ValidatePostText(tt.text)
+			issues := validatePostText(tt.text)
 			if tt.want == "" {
 				if len(issues) != 0 {
 					t.Fatalf("issues = %#v", issues)
@@ -46,14 +45,14 @@ func TestValidatePostTextAllowsNormalText(t *testing.T) {
 		"  9:05 is allowed here",
 		"#hashtag",
 	} {
-		if issues := ValidatePostText(text); len(issues) != 0 {
+		if issues := validatePostText(text); len(issues) != 0 {
 			t.Fatalf("text %q issues = %#v", text, issues)
 		}
 	}
 }
 
 func TestValidatePostTextMultipleViolations(t *testing.T) {
-	issues := ValidatePostText("# heading\n---\n**bold**")
+	issues := validatePostText("# heading\n---\n**bold**")
 	if len(issues) < 3 {
 		t.Fatalf("issues = %#v, want at least 3", issues)
 	}
@@ -74,7 +73,7 @@ func TestValidatePostTextMiddleDotScope(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			issues := ValidatePostText(tt.text)
+			issues := validatePostText(tt.text)
 			hasMiddleDotIssue := false
 			for _, issue := range issues {
 				if strings.Contains(issue, "中黒") {
@@ -91,14 +90,14 @@ func TestValidatePostTextMiddleDotScope(t *testing.T) {
 }
 
 func TestValidatePostTextMiddleDotReportsOneIssueForMultipleLines(t *testing.T) {
-	issues := ValidatePostText("・ item\n・ another")
+	issues := validatePostText("・ item\n・ another")
 	if len(issues) != 1 || !strings.Contains(issues[0], "中黒") {
 		t.Fatalf("issues = %#v, want one middle-dot issue", issues)
 	}
 }
 
 func TestValidatePostTextMiddleDotCombinesWithOtherIssues(t *testing.T) {
-	issues := ValidatePostText("・ item\n---\n# heading")
+	issues := validatePostText("・ item\n---\n# heading")
 	if len(issues) != 3 {
 		t.Fatalf("issues = %#v, want separator, heading, and middle-dot issues", issues)
 	}
@@ -116,15 +115,7 @@ func TestValidatePostTextMiddleDotCombinesWithOtherIssues(t *testing.T) {
 	}
 }
 
-func TestCheckTextValidationReturnsTypedError(t *testing.T) {
-	if err := CheckTextValidation("normal"); err != nil {
-		t.Fatalf("valid text error = %v", err)
-	}
-	err := CheckTextValidation("# invalid")
-	var validationErr *ValidationError
-	if !errors.As(err, &validationErr) || validationErr.Message == "" {
-		t.Fatalf("error = %#v", err)
-	}
+func TestNewValidationErrorReturnsTypedError(t *testing.T) {
 	constructed := NewValidationError([]string{"custom"})
 	if constructed.Error() != "バリデーションエラー: custom" {
 		t.Fatalf("NewValidationError() = %q", constructed)
@@ -148,7 +139,7 @@ func TestValidateTitleIssues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			issues := ValidateScratchpadTitle(tt.title)
+			issues := validateScratchpadTitle(tt.title)
 			if len(issues) == 0 || !strings.Contains(issues[0], tt.want) {
 				t.Fatalf("issues = %#v, want %q", issues, tt.want)
 			}
@@ -158,22 +149,11 @@ func TestValidateTitleIssues(t *testing.T) {
 
 func TestValidateTitleAllowsNormalTitle(t *testing.T) {
 	for _, title := range []string{"今日のメモ", "Example title #1", "カタカナ"} {
-		if issues := ValidateScratchpadTitle(title); len(issues) != 0 {
+		if issues := validateScratchpadTitle(title); len(issues) != 0 {
 			t.Fatalf("title %q issues = %#v", title, issues)
 		}
 	}
-	if issues := ValidateScratchpadTitle("ｶﾀｶﾅ"); len(issues) != 0 {
+	if issues := validateScratchpadTitle("ｶﾀｶﾅ"); len(issues) != 0 {
 		t.Fatalf("halfwidth katakana title issues = %#v", issues)
-	}
-}
-
-func TestCheckTitleValidationReturnsTypedError(t *testing.T) {
-	if err := CheckTitleValidation("valid title"); err != nil {
-		t.Fatalf("valid title error = %v", err)
-	}
-	err := CheckTitleValidation("invalid/title")
-	var validationErr *ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %#v", err)
 	}
 }

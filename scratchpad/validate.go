@@ -14,8 +14,7 @@ var (
 	listMarkerRE  = regexp.MustCompile(`^[-*]\s`)
 )
 
-// ValidatePostText returns all validation issues found in post text.
-func ValidatePostText(text string) []string {
+func validatePostText(text string) []string {
 	var issues []string
 	for _, line := range strings.Split(text, "\n") {
 		if strings.Contains(line, "---") && !strings.Contains(line, "|") {
@@ -50,17 +49,7 @@ func ValidatePostText(text string) []string {
 	return issues
 }
 
-// CheckTextValidation returns a ValidationError when text is invalid.
-func CheckTextValidation(text string) error {
-	issues := ValidatePostText(text)
-	if len(issues) == 0 {
-		return nil
-	}
-	return NewValidationError(issues)
-}
-
-// ValidateScratchpadTitle returns all validation issues found in a title.
-func ValidateScratchpadTitle(title string) []string {
+func validateScratchpadTitle(title string) []string {
 	var issues []string
 	if strings.Contains(title, "/") {
 		issues = append(issues, "スラッシュ(/)はカテゴリ区切りとして解釈されるため使用できません")
@@ -84,15 +73,6 @@ func ValidateScratchpadTitle(title string) []string {
 		issues = append(issues, "改行文字は使用できません")
 	}
 	return issues
-}
-
-// CheckTitleValidation returns a ValidationError when the title is invalid.
-func CheckTitleValidation(title string) error {
-	issues := ValidateScratchpadTitle(title)
-	if len(issues) == 0 {
-		return nil
-	}
-	return NewValidationError(issues)
 }
 
 func isAllowedLeadingChar(c rune) bool {
