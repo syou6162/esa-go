@@ -452,13 +452,13 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (string, error
 func (c *Client) uploadFile(ctx context.Context, filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("open %s %q: %w", "file", filePath, err)
+		return "", fmt.Errorf("open file %q: %w", filePath, err)
 	}
 	defer file.Close()
 
 	stat, err := file.Stat()
 	if err != nil {
-		return "", fmt.Errorf("stat %s %q: %w", "file", filePath, err)
+		return "", fmt.Errorf("stat file %q: %w", filePath, err)
 	}
 	if stat.Size() > MaxUploadFileSize {
 		return "", &FileTooLargeError{Path: filePath, Size: stat.Size(), Max: MaxUploadFileSize}
@@ -472,10 +472,10 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) (string, error
 	}
 	policyBody, err := json.Marshal(policyPayload)
 	if err != nil {
-		return "", fmt.Errorf("marshal policy request for %s %q: %w", "file", filePath, err)
+		return "", fmt.Errorf("marshal policy request for file %q: %w", filePath, err)
 	}
 
-	policyOp := fmt.Sprintf("esa.io get upload policy for %s %q", "file", filePath)
+	policyOp := fmt.Sprintf("esa.io get upload policy for file %q", filePath)
 	policyReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.attachmentPoliciesURL(), bytes.NewReader(policyBody))
 	if err != nil {
 		return "", fmt.Errorf("%s: build request: %s", policyOp, redactSecrets(err.Error()))
@@ -507,21 +507,21 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) (string, error
 	writer := multipart.NewWriter(&body)
 	for key, value := range policyResult.Form {
 		if err := writer.WriteField(key, value); err != nil {
-			return "", fmt.Errorf("write form field %s for %s %q: %w", key, "file", filePath, err)
+			return "", fmt.Errorf("write form field %s for file %q: %w", key, filePath, err)
 		}
 	}
 	part, err := writer.CreateFormFile("file", fileName)
 	if err != nil {
-		return "", fmt.Errorf("create form file for %s %q: %w", "file", filePath, err)
+		return "", fmt.Errorf("create form file for file %q: %w", filePath, err)
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return "", fmt.Errorf("write file content for %s %q: %w", "file", filePath, err)
+		return "", fmt.Errorf("write file content for file %q: %w", filePath, err)
 	}
 	if err := writer.Close(); err != nil {
-		return "", fmt.Errorf("close multipart writer for %s %q: %w", "file", filePath, err)
+		return "", fmt.Errorf("close multipart writer for file %q: %w", filePath, err)
 	}
 
-	uploadOp := fmt.Sprintf("esa.io upload %s %q", "file", filePath)
+	uploadOp := fmt.Sprintf("esa.io upload file %q", filePath)
 	uploadReq, err := http.NewRequestWithContext(ctx, http.MethodPost, policyResult.Attachment.Endpoint, &body)
 	if err != nil {
 		return "", fmt.Errorf("%s: build request: %s", uploadOp, redactSecrets(err.Error()))
