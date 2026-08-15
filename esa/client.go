@@ -25,7 +25,16 @@ const (
 	DefaultSearchSort    = "updated"
 	DefaultSearchOrder   = "desc"
 	MaxSearchPerPage     = 100
-	MaxUploadFileSize    = 50 * 1024 * 1024 // 50 MB, the maximum per-file size esa.io allows
+	// MaxUploadFileSize is the absolute per-file upload size limit for esa.io.
+	// esa.io's default limit is 10 MB, but teams using a custom S3 bucket or
+	// restricting attachment access to logged-in members can raise it to 50 MB.
+	// Since no plan supports files larger than 50 MB, the library uses 50 MB as
+	// the hard upper bound. See:
+	// - https://docs.esa.io/posts/106
+	// - https://docs.esa.io/posts/197
+	// Callers that need the stricter 10 MB default limit should check size before
+	// calling UploadFile.
+	MaxUploadFileSize = 50 * 1024 * 1024
 )
 
 // ErrFileTooLarge indicates the file exceeds the maximum upload size.
