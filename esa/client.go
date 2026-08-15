@@ -119,6 +119,11 @@ type ImageUploader interface {
 	UploadImage(ctx context.Context, filePath string) (string, error)
 }
 
+// FileUploader uploads a file and returns its esa URL.
+type FileUploader interface {
+	UploadFile(ctx context.Context, filePath string) (string, error)
+}
+
 // TeamNamer provides the configured team name.
 type TeamNamer interface {
 	TeamName() string
@@ -152,6 +157,7 @@ var _ PostReader = (*Client)(nil)
 var _ PostWriter = (*Client)(nil)
 var _ PostBodyUpdater = (*Client)(nil)
 var _ ImageUploader = (*Client)(nil)
+var _ FileUploader = (*Client)(nil)
 var _ TeamNamer = (*Client)(nil)
 
 // TeamName returns the configured team name.
@@ -424,15 +430,24 @@ func tagsOrEmpty(tags []string) []string {
 
 // UploadImage uploads a local image through esa's upload-policy flow.
 func (c *Client) UploadImage(ctx context.Context, filePath string) (string, error) {
+	return c.uploadFile(ctx, filePath, "image")
+}
+
+// UploadFile uploads a local file through esa's upload-policy flow.
+func (c *Client) UploadFile(ctx context.Context, filePath string) (string, error) {
+	return c.uploadFile(ctx, filePath, "file")
+}
+
+func (c *Client) uploadFile(ctx context.Context, filePath, noun string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("open image %q: %w", filePath, err)
+		return "", fmt.Errorf("open %s %q: %w", noun, filePath, err)
 	}
 	defer file.Close()
 
 	stat, err := file.Stat()
 	if err != nil {
-		return "", fmt.Errorf("stat image %q: %w", filePath, err)
+		return "", fmt.Errorf("stat %s %q: %w", noun, filePath, err)
 	}
 
 	fileName := filepath.Base(filePath)
@@ -443,10 +458,10 @@ func (c *Client) UploadImage(ctx context.Context, filePath string) (string, erro
 	}
 	policyBody, err := json.Marshal(policyPayload)
 	if err != nil {
-		return "", fmt.Errorf("marshal policy request for image %q: %w", filePath, err)
+		return "", fmt.Errorf("marshal policy request for %s %q: %w", noun, filePath, err)
 	}
 
-	policyOp := fmt.Sprintf("esa.io get upload policy for image %q", filePath)
+	policyOp := fmt.Sprintf("esa.io get upload policy for %s %q", noun, filePath)
 	policyReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.attachmentPoliciesURL(), bytes.NewReader(policyBody))
 	if err != nil {
 		return "", fmt.Errorf("%s: build request: %s", policyOp, redactSecrets(err.Error()))
@@ -478,21 +493,21 @@ func (c *Client) UploadImage(ctx context.Context, filePath string) (string, erro
 	writer := multipart.NewWriter(&body)
 	for key, value := range policyResult.Form {
 		if err := writer.WriteField(key, value); err != nil {
-			return "", fmt.Errorf("write form field %s for image %q: %w", key, filePath, err)
+			return "", fmt.Errorf("write form field %s for %s %q: %w", key, noun, filePath, err)
 		}
 	}
 	part, err := writer.CreateFormFile("file", fileName)
 	if err != nil {
-		return "", fmt.Errorf("create form file for image %q: %w", filePath, err)
+		return "", fmt.Errorf("create form file for %s %q: %w", noun, filePath, err)
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return "", fmt.Errorf("write file content for image %q: %w", filePath, err)
+		return "", fmt.Errorf("write file content for %s %q: %w", noun, filePath, err)
 	}
 	if err := writer.Close(); err != nil {
-		return "", fmt.Errorf("close multipart writer for image %q: %w", filePath, err)
+		return "", fmt.Errorf("close multipart writer for %s %q: %w", noun, filePath, err)
 	}
 
-	uploadOp := fmt.Sprintf("esa.io upload image %q", filePath)
+	uploadOp := fmt.Sprintf("esa.io upload %s %q", noun, filePath)
 	uploadReq, err := http.NewRequestWithContext(ctx, http.MethodPost, policyResult.Attachment.Endpoint, &body)
 	if err != nil {
 		return "", fmt.Errorf("%s: build request: %s", uploadOp, redactSecrets(err.Error()))
@@ -631,6 +646,16 @@ func detectContentType(filePath string) string {
 		return "image/gif"
 	case ".webp":
 		return "image/webp"
+	case ".mov", ".qt":
+		return "video/quicktime"
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".mpeg", ".mpg":
+		return "video/mpeg"
+	case ".webm":
+		return "video/webm"
+	case ".ogv":
+		return "video/ogg"
 	default:
 		return "application/octet-stream"
 	}

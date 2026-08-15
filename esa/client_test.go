@@ -688,11 +688,65 @@ func TestDetectContentType(t *testing.T) {
 	tests := map[string]string{
 		"image.png": "image/png", "image.jpg": "image/jpeg", "image.jpeg": "image/jpeg",
 		"image.gif": "image/gif", "image.webp": "image/webp", "image.bmp": "application/octet-stream",
+		"video.mov": "video/quicktime", "video.mp4": "video/mp4", "video.m4v": "video/mp4",
+		"video.webm": "video/webm", "video.ogv": "video/ogg", "video.avi": "application/octet-stream",
 	}
 	for path, want := range tests {
 		if got := detectContentType(path); got != want {
 			t.Errorf("detectContentType(%q) = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestUploadFile(t *testing.T) {
+	var policyType string
+	var uploadContentType string
+	var uploadedFile *multipart.FileHeader
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/teams/example-team/attachments/policies":
+			var payload struct {
+				Type string `json:"type"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+			policyType = payload.Type
+			_, _ = io.WriteString(w, `{"attachment":{"endpoint":"`+srv.URL+`/upload?signature=upload-secret","url":"https://cdn.example.invalid/video"},"form":{"policy":"form-value"}}`)
+		case "/upload":
+			uploadContentType = r.Header.Get("Content-Type")
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Error(err)
+				return
+			}
+			_, uploadedFile, _ = r.FormFile("file")
+			w.WriteHeader(http.StatusCreated)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	filePath := filepath.Join(t.TempDir(), "video.MOV")
+	if err := os.WriteFile(filePath, []byte("video-data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	gotURL, err := testClient(srv).UploadFile(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("UploadFile: %v", err)
+	}
+	if gotURL != "https://cdn.example.invalid/video" {
+		t.Errorf("URL = %q", gotURL)
+	}
+	if policyType != "video/quicktime" {
+		t.Errorf("policy type = %q", policyType)
+	}
+	if uploadContentType == "" || !strings.HasPrefix(uploadContentType, "multipart/form-data; boundary=") {
+		t.Errorf("upload Content-Type = %q", uploadContentType)
+	}
+	if uploadedFile == nil || uploadedFile.Filename != "video.MOV" {
+		t.Fatalf("uploaded file = %#v", uploadedFile)
 	}
 }
 
