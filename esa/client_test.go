@@ -727,8 +727,12 @@ func TestUploadFileRejectsTooLarge(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := NewClient("example-team", "dummy-token").UploadFile(context.Background(), filePath)
-	if !errors.Is(err, ErrFileTooLarge) {
-		t.Fatalf("UploadFile error = %v, want ErrFileTooLarge", err)
+	var fileErr *FileTooLargeError
+	if !errors.As(err, &fileErr) {
+		t.Fatalf("UploadFile error = %v, want *FileTooLargeError", err)
+	}
+	if fileErr.Path != filePath || fileErr.Size != MaxUploadFileSize+1 || fileErr.Max != MaxUploadFileSize {
+		t.Fatalf("FileTooLargeError = %+v", fileErr)
 	}
 }
 
