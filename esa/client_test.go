@@ -648,11 +648,10 @@ func TestDetectContentType(t *testing.T) {
 
 func TestUploadFile(t *testing.T) {
 	tests := []struct {
-		name         string
-		fileName     string
-		content      string
-		wantType     string
-		wantUploaded bool
+		name     string
+		fileName string
+		content  string
+		wantType string
 	}{
 		{name: "image", fileName: "image.PNG", content: "image-data", wantType: "image/png"},
 		{name: "video", fileName: "video.MOV", content: "video-data", wantType: "video/quicktime"},
@@ -723,10 +722,19 @@ func TestUploadFile(t *testing.T) {
 
 func TestUploadFileRejectsTooLarge(t *testing.T) {
 	filePath := filepath.Join(t.TempDir(), "huge.bin")
-	if err := os.WriteFile(filePath, make([]byte, MaxUploadFileSize+1), 0600); err != nil {
+	f, err := os.Create(filePath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewClient("example-team", "dummy-token").UploadFile(context.Background(), filePath)
+	if err := f.Truncate(MaxUploadFileSize + 1); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = NewClient("example-team", "dummy-token").UploadFile(context.Background(), filePath)
 	var fileErr *FileTooLargeError
 	if !errors.As(err, &fileErr) {
 		t.Fatalf("UploadFile error = %v, want *FileTooLargeError", err)
