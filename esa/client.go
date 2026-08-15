@@ -37,8 +37,25 @@ const (
 	MaxUploadFileSize = 50 * 1024 * 1024
 )
 
-// ErrFileTooLarge indicates the file exceeds the maximum upload size.
+// ErrFileTooLarge marks an error caused by exceeding the maximum upload size.
 var ErrFileTooLarge = errors.New("file exceeds maximum upload size")
+
+// FileTooLargeError reports that a file exceeded the upload size limit.
+type FileTooLargeError struct {
+	Path string
+	Size int64
+	Max  int64
+}
+
+// Error returns a message that includes the file path, its size, and the maximum allowed size.
+func (e *FileTooLargeError) Error() string {
+	return fmt.Sprintf("file %q size %d exceeds maximum upload size %d", e.Path, e.Size, e.Max)
+}
+
+// Is reports that FileTooLargeError matches ErrFileTooLarge for errors.Is checks.
+func (e *FileTooLargeError) Is(target error) bool {
+	return target == ErrFileTooLarge
+}
 
 // SearchPostsInput holds search and pagination parameters.
 type SearchPostsInput struct {
@@ -453,7 +470,7 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) (string, error
 		return "", fmt.Errorf("stat %s %q: %w", "file", filePath, err)
 	}
 	if stat.Size() > MaxUploadFileSize {
-		return "", fmt.Errorf("file %q size %d exceeds maximum upload size %d: %w", filePath, stat.Size(), MaxUploadFileSize, ErrFileTooLarge)
+		return "", &FileTooLargeError{Path: filePath, Size: stat.Size(), Max: MaxUploadFileSize}
 	}
 
 	fileName := filepath.Base(filePath)
