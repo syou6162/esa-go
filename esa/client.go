@@ -594,11 +594,10 @@ func (c *Client) CompareRevisions(ctx context.Context, in CompareRevisionsInput)
 // revision and stores the result as the new latest revision; the history is
 // kept. WIP and Message are sent only when set.
 //
-// It wraps ErrNotFound for HTTP 404 and ErrRollbackToLatestRevision for HTTP
-// 400, which esa.io returns when the target revision is already the latest one.
-// The API exposes no machine-readable reason for a 400, so any other bad
-// request would map to the same error; the response body is kept in the error
-// message.
+// Non-2xx responses are surfaced as errors carrying the status code and the
+// response body: esa.io returns HTTP 400 when the target revision is already
+// the latest one, but exposes no machine-readable reason, so interpreting the
+// status is left to the caller.
 //
 // The Revision API is a beta feature; see the Revision type for primary sources.
 func (c *Client) RollbackRevision(ctx context.Context, in RollbackRevisionInput) (*Post, error) {
@@ -618,7 +617,7 @@ func (c *Client) RollbackRevision(ctx context.Context, in RollbackRevisionInput)
 	payload := map[string]any{"post": post}
 	op := fmt.Sprintf("esa.io rollback post %d to revision %d", in.PostNumber, in.RevisionNumber)
 	endpoint := fmt.Sprintf("%s/rollback", c.revisionURL(in.PostNumber, in.RevisionNumber))
-	return c.doJSONWithStatusError(ctx, http.MethodPost, endpoint, payload, op, c.rollbackStatusError)
+	return c.postJSON(ctx, endpoint, payload, op)
 }
 
 func tagsOrEmpty(tags []string) []string {
@@ -759,12 +758,6 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, query url.Values,
 }
 
 func (c *Client) doJSON(ctx context.Context, method, endpoint string, payload any, op string) (*Post, error) {
-	return c.doJSONWithStatusError(ctx, method, endpoint, payload, op, c.httpStatusError)
-}
-
-type statusErrorFunc func(op string, endpoint *url.URL, resp *http.Response) error
-
-func (c *Client) doJSONWithStatusError(ctx context.Context, method, endpoint string, payload any, op string, statusError statusErrorFunc) (*Post, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("%s: marshal request: %w", op, err)
@@ -782,7 +775,7 @@ func (c *Client) doJSONWithStatusError(ctx context.Context, method, endpoint str
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, statusError(op, req.URL, resp)
+		return nil, c.httpStatusError(op, req.URL, resp)
 	}
 
 	var post Post
@@ -808,25 +801,6 @@ func (c *Client) notFoundStatusError(op string, endpoint *url.URL, resp *http.Re
 		return fmt.Errorf("%s via %s: status %d: %w: %w", op, safeEndpoint, resp.StatusCode, ErrNotFound, readErr)
 	}
 	return fmt.Errorf("%s via %s: status %d, body: %s: %w", op, safeEndpoint, resp.StatusCode, redactSecrets(string(body)), ErrNotFound)
-}
-
-// rollbackStatusError maps the rollback endpoint statuses that callers branch
-// on: HTTP 404 for a missing post or revision, and HTTP 400 for a rollback to
-// the revision that is already the latest one.
-func (c *Client) rollbackStatusError(op string, endpoint *url.URL, resp *http.Response) error {
-	switch resp.StatusCode {
-	case http.StatusNotFound:
-		return c.notFoundStatusError(op, endpoint, resp)
-	case http.StatusBadRequest:
-		body, readErr := readErrorBody(resp.Body)
-		safeEndpoint := safeURL(endpoint)
-		if readErr != nil {
-			return fmt.Errorf("%s via %s: status %d: %w: %w", op, safeEndpoint, resp.StatusCode, ErrRollbackToLatestRevision, readErr)
-		}
-		return fmt.Errorf("%s via %s: status %d, body: %s: %w", op, safeEndpoint, resp.StatusCode, redactSecrets(string(body)), ErrRollbackToLatestRevision)
-	default:
-		return c.httpStatusError(op, endpoint, resp)
-	}
 }
 
 func readErrorBody(reader io.Reader) ([]byte, error) {

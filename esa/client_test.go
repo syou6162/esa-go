@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -1099,57 +1100,37 @@ func TestRollbackRevision(t *testing.T) {
 		}
 	})
 
-	t.Run("404 is not found", func(t *testing.T) {
-		srv := httptest.NewServer(notFoundHandler())
-		defer srv.Close()
+	t.Run("non-2xx keeps status and body", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			status int
+			body   string
+		}{
+			{name: "404", status: http.StatusNotFound, body: `{"error":"not_found"}`},
+			{name: "400", status: http.StatusBadRequest, body: `{"error":"bad_request","message":"cannot rollback to the latest revision"}`},
+			{name: "401", status: http.StatusUnauthorized, body: `{"error":"unauthorized"}`},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(tt.status)
+					_, _ = io.WriteString(w, tt.body)
+				}))
+				defer srv.Close()
 
-		_, err := testClient(srv).RollbackRevision(context.Background(), RollbackRevisionInput{
-			PostNumber: 42, RevisionNumber: 999,
-		})
-		if !errors.Is(err, ErrNotFound) {
-			t.Fatalf("err = %v, want ErrNotFound", err)
-		}
-		if errors.Is(err, ErrRollbackToLatestRevision) {
-			t.Fatalf("err = %v, want not ErrRollbackToLatestRevision", err)
-		}
-	})
-
-	t.Run("400 is rollback to latest revision", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = io.WriteString(w, `{"error":"bad_request","message":"cannot rollback to the latest revision"}`)
-		}))
-		defer srv.Close()
-
-		_, err := testClient(srv).RollbackRevision(context.Background(), RollbackRevisionInput{
-			PostNumber: 42, RevisionNumber: 6,
-		})
-		if !errors.Is(err, ErrRollbackToLatestRevision) {
-			t.Fatalf("err = %v, want ErrRollbackToLatestRevision", err)
-		}
-		if errors.Is(err, ErrNotFound) {
-			t.Fatalf("err = %v, want not ErrNotFound", err)
-		}
-		if !strings.Contains(err.Error(), "rollback post 42 to revision 6") || !strings.Contains(err.Error(), "status 400") {
-			t.Fatalf("err = %v", err)
-		}
-	})
-
-	t.Run("other non-2xx", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = io.WriteString(w, `{"error":"unauthorized"}`)
-		}))
-		defer srv.Close()
-
-		_, err := testClient(srv).RollbackRevision(context.Background(), RollbackRevisionInput{
-			PostNumber: 42, RevisionNumber: 4,
-		})
-		if err == nil || !strings.Contains(err.Error(), "status 401") {
-			t.Fatalf("err = %v, want status 401", err)
-		}
-		if errors.Is(err, ErrRollbackToLatestRevision) || errors.Is(err, ErrNotFound) {
-			t.Fatalf("err = %v, want untyped error", err)
+				_, err := testClient(srv).RollbackRevision(context.Background(), RollbackRevisionInput{
+					PostNumber: 42, RevisionNumber: 6,
+				})
+				if err == nil {
+					t.Fatal("want error")
+				}
+				if !strings.Contains(err.Error(), fmt.Sprintf("status %d", tt.status)) || !strings.Contains(err.Error(), tt.body) {
+					t.Fatalf("err = %v", err)
+				}
+				if !strings.Contains(err.Error(), "rollback post 42 to revision 6") {
+					t.Fatalf("err = %v", err)
+				}
+			})
 		}
 	})
 }
