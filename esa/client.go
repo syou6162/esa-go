@@ -594,8 +594,11 @@ func (c *Client) CompareRevisions(ctx context.Context, in CompareRevisionsInput)
 // revision and stores the result as the new latest revision; the history is
 // kept. WIP and Message are sent only when set.
 //
-// It wraps ErrNotFound for HTTP 404 and ErrRollbackToLatestRevision for the
-// HTTP 400 that esa.io returns when the target revision is already the latest.
+// It wraps ErrNotFound for HTTP 404 and ErrRollbackToLatestRevision for HTTP
+// 400, which esa.io returns when the target revision is already the latest one.
+// The API exposes no machine-readable reason for a 400, so any other bad
+// request would map to the same error; the response body is kept in the error
+// message.
 //
 // The Revision API is a beta feature; see the Revision type for primary sources.
 func (c *Client) RollbackRevision(ctx context.Context, in RollbackRevisionInput) (*Post, error) {
