@@ -162,7 +162,7 @@ type PostWriter interface {
 	CreatePost(ctx context.Context, input CreatePostInput) (*Post, error)
 	UpdatePost(ctx context.Context, input UpdatePostInput) (*Post, error)
 	UpdatePostName(ctx context.Context, input UpdatePostNameInput) (*Post, error)
-	UpdateTags(ctx context.Context, input UpdateTagsInput) error
+	UpdateTags(ctx context.Context, input UpdateTagsInput) (*Post, error)
 }
 
 // RevisionReader groups read-only revision operations.
@@ -506,9 +506,9 @@ func (c *Client) UpdatePostName(ctx context.Context, in UpdatePostNameInput) (*P
 }
 
 // UpdateTags replaces the tags on an existing post and records the change message.
-func (c *Client) UpdateTags(ctx context.Context, in UpdateTagsInput) error {
+func (c *Client) UpdateTags(ctx context.Context, in UpdateTagsInput) (*Post, error) {
 	if err := validatePostNumber(in.PostNumber); err != nil {
-		return fmt.Errorf("esa.io update tags post %d: invalid input: %w", in.PostNumber, err)
+		return nil, fmt.Errorf("esa.io update tags post %d: invalid input: %w", in.PostNumber, err)
 	}
 	payload := map[string]any{
 		"post": map[string]any{
@@ -517,8 +517,7 @@ func (c *Client) UpdateTags(ctx context.Context, in UpdateTagsInput) error {
 		},
 	}
 	op := fmt.Sprintf("esa.io update tags post %d", in.PostNumber)
-	_, err := c.patchJSON(ctx, c.postURL(in.PostNumber), payload, op)
-	return err
+	return c.patchJSON(ctx, c.postURL(in.PostNumber), payload, op)
 }
 
 // ListRevisions retrieves the revisions of a post, newest first, together with
