@@ -5,4 +5,8 @@
 // consumers that need only selected read, write, body-update, image-upload,
 // or team-name capabilities. ErrNotFound identifies missing posts from
 // category searches and HTTP 404 responses. Error messages redact secrets.
+//
+// The revision endpoints (RevisionReader, RevisionRollbacker) wrap esa.io's
+// beta Revision API, which is not part of the official API reference; see the
+// Revision type for primary sources.
 package esa

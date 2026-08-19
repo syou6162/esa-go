@@ -51,3 +51,26 @@ func ParsePostNumber(raw int) (PostNumber, error) {
 	}
 	return PostNumber{value: raw}, nil
 }
+
+// RevisionNumber is a validated positive esa revision number.
+//
+// RevisionNumber values can be created only by ParseRevisionNumber. The zero
+// value is invalid and Int returns zero for it.
+type RevisionNumber struct {
+	value int
+}
+
+// Int returns the raw revision number.
+func (n RevisionNumber) Int() int {
+	return n.value
+}
+
+// ParseRevisionNumber validates and parses a positive esa revision number.
+func ParseRevisionNumber(raw int) (RevisionNumber, error) {
+	if raw <= 0 {
+		return RevisionNumber{}, NewValidationError(
+			[]string{fmt.Sprintf("リビジョン番号は正の整数である必要があります (revision_number=%d)", raw)},
+		)
+	}
+	return RevisionNumber{value: raw}, nil
+}

@@ -96,6 +96,39 @@ type UpdateTagsInput struct {
 	Message    string
 }
 
+// ListRevisionsInput holds parameters for listing post revisions.
+// Page and PerPage are omitted from the request when zero, which lets esa.io
+// apply its own defaults.
+type ListRevisionsInput struct {
+	PostNumber int
+	Page       int
+	PerPage    int
+}
+
+// GetRevisionInput holds parameters for retrieving a single revision.
+type GetRevisionInput struct {
+	PostNumber     int
+	RevisionNumber int
+}
+
+// CompareRevisionsInput holds parameters for comparing two revisions.
+type CompareRevisionsInput struct {
+	PostNumber         int
+	FromRevisionNumber int
+	ToRevisionNumber   int
+}
+
+// RollbackRevisionInput holds parameters for rolling a post back to a revision.
+// WIP and Message are optional: when nil they are omitted from the request body
+// and esa.io applies its own behaviour (the target revision's WIP state and a
+// generated change message).
+type RollbackRevisionInput struct {
+	PostNumber     int
+	RevisionNumber int
+	WIP            *bool
+	Message        *string
+}
+
 // Option configures a Client.
 type Option func(*Client)
 
@@ -130,6 +163,22 @@ type PostWriter interface {
 	UpdatePost(ctx context.Context, input UpdatePostInput) (*Post, error)
 	UpdatePostName(ctx context.Context, input UpdatePostNameInput) (*Post, error)
 	UpdateTags(ctx context.Context, input UpdateTagsInput) error
+}
+
+// RevisionReader groups read-only revision operations.
+//
+// The Revision API is a beta feature; see the Revision type for primary sources.
+type RevisionReader interface {
+	ListRevisions(ctx context.Context, input ListRevisionsInput) (*RevisionList, error)
+	GetRevision(ctx context.Context, input GetRevisionInput) (*Revision, error)
+	CompareRevisions(ctx context.Context, input CompareRevisionsInput) (*RevisionDiff, error)
+}
+
+// RevisionRollbacker rolls a post back to one of its earlier revisions.
+//
+// The Revision API is a beta feature; see the Revision type for primary sources.
+type RevisionRollbacker interface {
+	RollbackRevision(ctx context.Context, input RollbackRevisionInput) (*Post, error)
 }
 
 // PostBodyUpdater updates a post body without changing its tags.
@@ -174,6 +223,8 @@ func NewClient(teamName, accessToken string, opts ...Option) *Client {
 var _ PostReader = (*Client)(nil)
 var _ PostWriter = (*Client)(nil)
 var _ PostBodyUpdater = (*Client)(nil)
+var _ RevisionReader = (*Client)(nil)
+var _ RevisionRollbacker = (*Client)(nil)
 var _ FileUploader = (*Client)(nil)
 var _ TeamNamer = (*Client)(nil)
 
@@ -225,6 +276,29 @@ func validatePostNumber(postNumber int) error {
 	return nil
 }
 
+func validateRevisionNumber(revisionNumber int) error {
+	if revisionNumber <= 0 {
+		return fmt.Errorf("revision number must be positive")
+	}
+	return nil
+}
+
+func validateListRevisionsInput(in ListRevisionsInput) error {
+	if err := validatePostNumber(in.PostNumber); err != nil {
+		return err
+	}
+	if in.Page < 0 {
+		return fmt.Errorf("page must not be negative")
+	}
+	if in.PerPage < 0 {
+		return fmt.Errorf("per_page must not be negative")
+	}
+	if in.PerPage > MaxSearchPerPage {
+		return fmt.Errorf("per_page must be at most %d", MaxSearchPerPage)
+	}
+	return nil
+}
+
 func validateUpdatePostNameInput(in UpdatePostNameInput) error {
 	if err := validatePostNumber(in.PostNumber); err != nil {
 		return err
@@ -249,6 +323,14 @@ func (c *Client) attachmentPoliciesURL() string {
 
 func (c *Client) postURL(postNumber int) string {
 	return fmt.Sprintf("%s/%d", c.postsURL(), postNumber)
+}
+
+func (c *Client) revisionsURL(postNumber int) string {
+	return fmt.Sprintf("%s/revisions", c.postURL(postNumber))
+}
+
+func (c *Client) revisionURL(postNumber, revisionNumber int) string {
+	return fmt.Sprintf("%s/%d", c.revisionsURL(postNumber), revisionNumber)
 }
 
 // SearchByCategory returns the first post returned by the category search.
@@ -439,6 +521,105 @@ func (c *Client) UpdateTags(ctx context.Context, in UpdateTagsInput) error {
 	return err
 }
 
+// ListRevisions retrieves the revisions of a post, newest first, together with
+// the pagination information returned by esa.io. It wraps ErrNotFound for HTTP
+// 404.
+//
+// The Revision API is a beta feature; see the Revision type for primary sources.
+func (c *Client) ListRevisions(ctx context.Context, in ListRevisionsInput) (*RevisionList, error) {
+	if err := validateListRevisionsInput(in); err != nil {
+		return nil, fmt.Errorf("esa.io list revisions post %d: invalid input: %w", in.PostNumber, err)
+	}
+	query := url.Values{}
+	if in.Page > 0 {
+		query.Set("page", fmt.Sprintf("%d", in.Page))
+	}
+	if in.PerPage > 0 {
+		query.Set("per_page", fmt.Sprintf("%d", in.PerPage))
+	}
+	op := fmt.Sprintf("esa.io list revisions post %d", in.PostNumber)
+	var result RevisionList
+	if err := c.getJSON(ctx, c.revisionsURL(in.PostNumber), query, op, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// GetRevision retrieves a single revision of a post. It wraps ErrNotFound for
+// HTTP 404, which esa.io returns both for a missing post and a missing revision.
+//
+// The Revision API is a beta feature; see the Revision type for primary sources.
+func (c *Client) GetRevision(ctx context.Context, in GetRevisionInput) (*Revision, error) {
+	if err := validatePostNumber(in.PostNumber); err != nil {
+		return nil, fmt.Errorf("esa.io get revision post %d revision %d: invalid input: %w", in.PostNumber, in.RevisionNumber, err)
+	}
+	if err := validateRevisionNumber(in.RevisionNumber); err != nil {
+		return nil, fmt.Errorf("esa.io get revision post %d revision %d: invalid input: %w", in.PostNumber, in.RevisionNumber, err)
+	}
+	op := fmt.Sprintf("esa.io get revision post %d revision %d", in.PostNumber, in.RevisionNumber)
+	var result struct {
+		Revision Revision `json:"revision"`
+	}
+	if err := c.getJSON(ctx, c.revisionURL(in.PostNumber, in.RevisionNumber), nil, op, &result); err != nil {
+		return nil, err
+	}
+	return &result.Revision, nil
+}
+
+// CompareRevisions retrieves the diff between two revisions of a post. It wraps
+// ErrNotFound for HTTP 404.
+//
+// The Revision API is a beta feature; see the Revision type for primary sources.
+func (c *Client) CompareRevisions(ctx context.Context, in CompareRevisionsInput) (*RevisionDiff, error) {
+	if err := validatePostNumber(in.PostNumber); err != nil {
+		return nil, fmt.Errorf("esa.io compare revisions post %d %d...%d: invalid input: %w", in.PostNumber, in.FromRevisionNumber, in.ToRevisionNumber, err)
+	}
+	for _, revisionNumber := range []int{in.FromRevisionNumber, in.ToRevisionNumber} {
+		if err := validateRevisionNumber(revisionNumber); err != nil {
+			return nil, fmt.Errorf("esa.io compare revisions post %d %d...%d: invalid input: %w", in.PostNumber, in.FromRevisionNumber, in.ToRevisionNumber, err)
+		}
+	}
+	op := fmt.Sprintf("esa.io compare revisions post %d %d...%d", in.PostNumber, in.FromRevisionNumber, in.ToRevisionNumber)
+	endpoint := fmt.Sprintf("%s/compare/%d...%d", c.revisionsURL(in.PostNumber), in.FromRevisionNumber, in.ToRevisionNumber)
+	var result struct {
+		Diff RevisionDiff `json:"diff"`
+	}
+	if err := c.getJSON(ctx, endpoint, nil, op, &result); err != nil {
+		return nil, err
+	}
+	return &result.Diff, nil
+}
+
+// RollbackRevision restores the name, category, tags, and body of the given
+// revision and stores the result as the new latest revision; the history is
+// kept. WIP and Message are sent only when set.
+//
+// Non-2xx responses are surfaced as errors carrying the status code and the
+// response body: esa.io returns HTTP 400 when the target revision is already
+// the latest one, but exposes no machine-readable reason, so interpreting the
+// status is left to the caller.
+//
+// The Revision API is a beta feature; see the Revision type for primary sources.
+func (c *Client) RollbackRevision(ctx context.Context, in RollbackRevisionInput) (*Post, error) {
+	if err := validatePostNumber(in.PostNumber); err != nil {
+		return nil, fmt.Errorf("esa.io rollback post %d to revision %d: invalid input: %w", in.PostNumber, in.RevisionNumber, err)
+	}
+	if err := validateRevisionNumber(in.RevisionNumber); err != nil {
+		return nil, fmt.Errorf("esa.io rollback post %d to revision %d: invalid input: %w", in.PostNumber, in.RevisionNumber, err)
+	}
+	post := map[string]any{}
+	if in.WIP != nil {
+		post["wip"] = *in.WIP
+	}
+	if in.Message != nil {
+		post["message"] = *in.Message
+	}
+	payload := map[string]any{"post": post}
+	op := fmt.Sprintf("esa.io rollback post %d to revision %d", in.PostNumber, in.RevisionNumber)
+	endpoint := fmt.Sprintf("%s/rollback", c.revisionURL(in.PostNumber, in.RevisionNumber))
+	return c.postJSON(ctx, endpoint, payload, op)
+}
+
 func tagsOrEmpty(tags []string) []string {
 	if tags == nil {
 		return []string{}
@@ -547,6 +728,33 @@ func (c *Client) postJSON(ctx context.Context, endpoint string, payload any, op 
 
 func (c *Client) patchJSON(ctx context.Context, endpoint string, payload any, op string) (*Post, error) {
 	return c.doJSON(ctx, http.MethodPatch, endpoint, payload, op)
+}
+
+func (c *Client) getJSON(ctx context.Context, endpoint string, query url.Values, op string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("%s: build request: %s", op, redactSecrets(err.Error()))
+	}
+	if len(query) > 0 {
+		req.URL.RawQuery = query.Encode()
+	}
+	req.Header.Set("Authorization", c.authHeader())
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return wrapTransportError(op, req.URL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusNotFound {
+			return c.notFoundStatusError(op, req.URL, resp)
+		}
+		return c.httpStatusError(op, req.URL, resp)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("%s via %s: decode response: %w", op, safeURL(req.URL), err)
+	}
+	return nil
 }
 
 func (c *Client) doJSON(ctx context.Context, method, endpoint string, payload any, op string) (*Post, error) {

@@ -25,5 +25,7 @@ func NewValidationError(issues []string) *ValidationError {
 	}
 }
 
-// ErrNotFound indicates that a post lookup found no matching post.
-var ErrNotFound = errors.New("esa: post not found")
+// ErrNotFound indicates that a post lookup found no matching post, or that a
+// revision lookup found no matching post or revision: esa.io answers all of
+// these cases with HTTP 404.
+var ErrNotFound = errors.New("esa: post or revision not found")
