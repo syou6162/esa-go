@@ -95,6 +95,32 @@ func TestParsePostNumber(t *testing.T) {
 	}
 }
 
+func TestParseRevisionNumber(t *testing.T) {
+	for _, raw := range []int{0, -1} {
+		_, err := ParseRevisionNumber(raw)
+		if err == nil {
+			t.Fatalf("ParseRevisionNumber(%d) succeeded", raw)
+		}
+		want := "バリデーションエラー: リビジョン番号は正の整数である必要があります (revision_number=" +
+			strconv.Itoa(raw) + ")"
+		if err.Error() != want {
+			t.Fatalf("error = %q, want %q", err, want)
+		}
+		var validationErr *ValidationError
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("error = %T, want *ValidationError", err)
+		}
+	}
+
+	got, err := ParseRevisionNumber(5)
+	if err != nil {
+		t.Fatalf("ParseRevisionNumber(5) error = %v", err)
+	}
+	if got.Int() != 5 {
+		t.Fatalf("Int() = %d, want 5", got.Int())
+	}
+}
+
 func TestPostNumberZeroValueAndComparable(t *testing.T) {
 	var zero PostNumber
 	if zero.Int() != 0 {
@@ -114,5 +140,27 @@ func TestPostNumberZeroValueAndComparable(t *testing.T) {
 	values := map[PostNumber]string{first: "value"}
 	if values[second] != "value" {
 		t.Fatal("PostNumber cannot be used as an equivalent map key")
+	}
+}
+
+func TestRevisionNumberZeroValueAndComparable(t *testing.T) {
+	var zero RevisionNumber
+	if zero.Int() != 0 {
+		t.Fatalf("zero Int() = %d", zero.Int())
+	}
+	first, err := ParseRevisionNumber(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ParseRevisionNumber(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("equal parsed RevisionNumber values are not comparable")
+	}
+	values := map[RevisionNumber]string{first: "value"}
+	if values[second] != "value" {
+		t.Fatal("RevisionNumber cannot be used as an equivalent map key")
 	}
 }
