@@ -516,13 +516,27 @@ func TestUpdateTagsRequestContract(t *testing.T) {
 	defer srv.Close()
 
 	client := testClient(srv)
-	for _, tags := range [][]string{{"tag-a"}, nil} {
-		if err := client.UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: tags}); err != nil {
-			t.Fatalf("UpdateTags(%v): %v", tags, err)
-		}
+	tests := []struct {
+		name    string
+		tags    []string
+		message string
+	}{
+		{name: "message", tags: []string{"tag-a"}, message: "tag update"},
+		{name: "empty message and nil tags", message: ""},
 	}
-	if len(requests) != 2 {
-		t.Fatalf("request count = %d, want 2", len(requests))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := client.UpdateTags(context.Background(), UpdateTagsInput{
+				PostNumber: 100,
+				Tags:       tt.tags,
+				Message:    tt.message,
+			}); err != nil {
+				t.Fatalf("UpdateTags(%+v): %v", tt, err)
+			}
+		})
+	}
+	if len(requests) != len(tests) {
+		t.Fatalf("request count = %d, want %d", len(requests), len(tests))
 	}
 	for i, request := range requests {
 		if request.method != http.MethodPatch || request.path != "/teams/example-team/posts/100" {
@@ -531,8 +545,8 @@ func TestUpdateTagsRequestContract(t *testing.T) {
 		if request.auth != "Bearer dummy-token" {
 			t.Errorf("Authorization[%d] = %q", i, request.auth)
 		}
-		if len(request.body) != 1 {
-			t.Errorf("payload[%d] = %#v, want only tags", i, request.body)
+		if len(request.body) != 2 {
+			t.Errorf("payload[%d] = %#v, want only tags and message", i, request.body)
 		}
 		tags, ok := request.body["tags"].([]any)
 		if !ok {
@@ -544,7 +558,13 @@ func TestUpdateTagsRequestContract(t *testing.T) {
 		if i == 1 && len(tags) != 0 {
 			t.Errorf("tags[%d] = %#v, want empty array", i, tags)
 		}
-		for _, forbidden := range []string{"name", "body_md", "message", "category"} {
+		message, ok := request.body["message"]
+		if !ok {
+			t.Errorf("payload[%d] = %#v, want message key", i, request.body)
+		} else if message != tests[i].message {
+			t.Errorf("message[%d] = %#v, want %q", i, message, tests[i].message)
+		}
+		for _, forbidden := range []string{"name", "body_md", "category", "wip"} {
 			if _, ok := request.body[forbidden]; ok {
 				t.Errorf("payload[%d] = %#v, want no %s", i, request.body, forbidden)
 			}
