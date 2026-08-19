@@ -93,6 +93,7 @@ type UpdatePostNameInput struct {
 type UpdateTagsInput struct {
 	PostNumber int
 	Tags       []string
+	Message    string
 }
 
 // Option configures a Client.
@@ -422,14 +423,15 @@ func (c *Client) UpdatePostName(ctx context.Context, in UpdatePostNameInput) (*P
 	return c.patchJSON(ctx, c.postURL(in.PostNumber), payload, op)
 }
 
-// UpdateTags replaces the tags on an existing post.
+// UpdateTags replaces the tags on an existing post and records the change message.
 func (c *Client) UpdateTags(ctx context.Context, in UpdateTagsInput) error {
 	if err := validatePostNumber(in.PostNumber); err != nil {
 		return fmt.Errorf("esa.io update tags post %d: invalid input: %w", in.PostNumber, err)
 	}
 	payload := map[string]any{
 		"post": map[string]any{
-			"tags": tagsOrEmpty(in.Tags),
+			"tags":    tagsOrEmpty(in.Tags),
+			"message": in.Message,
 		},
 	}
 	op := fmt.Sprintf("esa.io update tags post %d", in.PostNumber)
