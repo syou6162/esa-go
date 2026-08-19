@@ -512,7 +512,11 @@ func TestUpdateTagsRequestContract(t *testing.T) {
 			auth   string
 			body   map[string]any
 		}{r.Method, r.URL.Path, r.Header.Get("Authorization"), payload["post"].(map[string]any)})
-		_, _ = io.WriteString(w, `{"number":100}`)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"number":          100,
+			"revision_number": 7,
+			"tags":            payload["post"].(map[string]any)["tags"],
+		})
 	}))
 	defer srv.Close()
 
@@ -527,12 +531,27 @@ func TestUpdateTagsRequestContract(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := client.UpdateTags(context.Background(), UpdateTagsInput{
+			post, err := client.UpdateTags(context.Background(), UpdateTagsInput{
 				PostNumber: 100,
 				Tags:       tt.tags,
 				Message:    tt.message,
-			}); err != nil {
+			})
+			if err != nil {
 				t.Fatalf("UpdateTags(%+v): %v", tt, err)
+			}
+			if post == nil {
+				t.Fatal("UpdateTags returned nil post")
+			}
+			if post.Number != 100 || post.RevisionNumber != 7 {
+				t.Errorf("post = %+v, want number 100 and revision_number 7", post)
+			}
+			if len(post.Tags) != len(tt.tags) {
+				t.Fatalf("post.Tags = %#v, want %#v", post.Tags, tt.tags)
+			}
+			for i := range tt.tags {
+				if post.Tags[i] != tt.tags[i] {
+					t.Errorf("post.Tags[%d] = %q, want %q", i, post.Tags[i], tt.tags[i])
+				}
 			}
 		})
 	}
@@ -581,7 +600,10 @@ func TestUpdateTagsErrors(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := testClient(srv).UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: []string{"tag-a"}})
+		post, err := testClient(srv).UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: []string{"tag-a"}})
+		if post != nil {
+			t.Errorf("post = %+v, want nil", post)
+		}
 		if err == nil || !strings.Contains(err.Error(), "status 403") {
 			t.Fatalf("err = %v, want status 403", err)
 		}
@@ -593,7 +615,10 @@ func TestUpdateTagsErrors(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := testClient(srv).UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: []string{"tag-a"}})
+		post, err := testClient(srv).UpdateTags(context.Background(), UpdateTagsInput{PostNumber: 100, Tags: []string{"tag-a"}})
+		if post != nil {
+			t.Errorf("post = %+v, want nil", post)
+		}
 		if err == nil || !strings.Contains(err.Error(), "decode response") {
 			t.Fatalf("err = %v, want decode response", err)
 		}
@@ -638,7 +663,8 @@ func TestWriteOperationsRejectInvalidPostNumbers(t *testing.T) {
 			{
 				name: "UpdateTags",
 				call: func() error {
-					return client.UpdateTags(context.Background(), UpdateTagsInput{PostNumber: number, Tags: []string{"tag-a"}})
+					_, err := client.UpdateTags(context.Background(), UpdateTagsInput{PostNumber: number, Tags: []string{"tag-a"}})
+					return err
 				},
 			},
 		}
