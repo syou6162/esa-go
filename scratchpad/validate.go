@@ -15,7 +15,13 @@ var (
 )
 
 func validatePostText(text string) []string {
-	issues := textstyle.Validate(text)
+	var issues []string
+	if containsSeparator(text) {
+		issues = append(issues, "区切り線(---)が含まれています")
+	}
+	issues = append(issues, textstyle.ValidateBold(text)...)
+	issues = append(issues, textstyle.ValidateHeading(text)...)
+	issues = append(issues, textstyle.Validate(text)...)
 	if leadingTimeRE.MatchString(text) {
 		issues = append(issues, "先頭（行頭）に時刻が含まれています。時刻はシステムが自動挿入するため不要です")
 	}
@@ -23,6 +29,18 @@ func validatePostText(text string) []string {
 		issues = append(issues, "先頭（行頭）にマークダウンリスト記法(- / *)が使用されています。タイムスタンプ挿入でスタイルが崩れるため使用できません")
 	}
 	return issues
+}
+
+// containsSeparator reports whether text has a line that reads as the Markdown
+// horizontal rule used to separate entries. A line that also has a table cell
+// delimiter is treated as a table separator row instead.
+func containsSeparator(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "---") && !strings.Contains(line, "|") {
+			return true
+		}
+	}
+	return false
 }
 
 func validateScratchpadTitle(title string) []string {

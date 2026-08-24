@@ -83,15 +83,17 @@ TimestampID の生成関数は渡された `time.Time` を使って ID を作る
 
 本文 text では、記事本文に共通の記法ルールと、entry format 固有のルールの両方を reject します。
 
-共通の記法ルール（separator、Markdown heading、Markdown bold syntax、全角 colon、全角 parentheses、行頭の中黒 `・`）は `textstyle` package が持ちます。判定内容は [`textstyle-spec.md`](textstyle-spec.md) を参照してください。
+共通の記法ルール（全角 colon、全角 parentheses、行頭の中黒 `・`）は `textstyle.Validate` が持ちます。加えて、entry 本文では Markdown heading と Markdown bold syntax も許容しないため、`textstyle.ValidateHeading` と `textstyle.ValidateBold` を組み合わせて使います。判定内容は [`textstyle-spec.md`](textstyle-spec.md) を参照してください。
 
 entry format 固有のルールとして、次を reject します。
 
+- 水平線 `---`
 - 本文全体の先頭（システムが anchor を連結する位置）の `HH:MM` のような時刻
 - 本文全体の先頭（システムが anchor を連結する位置）の `- ` または `* ` の list marker
 
-どちらも entry の先頭に anchor を連結する format の制約なので、検証対象は本文全体の先頭だけです。2 行目以降に
-時刻表記や list marker があっても reject しません。
+`---` は entry 同士を分ける separator として使うため、本文には書けません。ただし table row の一部として使われる separator は例外で、table の cell 区切りを含む行は reject しません。
+
+時刻表記と list marker はどちらも entry の先頭に anchor を連結する format の制約なので、検証対象は本文全体の先頭だけです。2 行目以降に時刻表記や list marker があっても reject しません。
 
 validation は入力を別の本文へ変換するものではありません。禁止される構造を見つけたら具体的な validation error を返し、入力 text 自体は保持します。
 

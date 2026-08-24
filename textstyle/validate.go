@@ -11,53 +11,62 @@ var (
 	headingRE = regexp.MustCompile(`(?m)^#{1,6}\s`)
 )
 
-// Validate reports the style issues found in text.
+// Validate reports the style issues that apply to any esa.io article text.
 //
-// It returns nil when text has no issue. The issues are Japanese messages
-// meant for the author of the text, and the order is stable so callers can
-// join them into a single error message.
+// It covers the full-width punctuation rules and the leading middle dot, which
+// are unwanted regardless of the article format. Rules that only some formats
+// want, such as Markdown heading and bold syntax, have their own functions so
+// callers can combine the ones they need.
+//
+// Every function in this package returns nil when text has no issue, and
+// returns Japanese messages meant for the author of the text.
 func Validate(text string) []string {
 	var issues []string
-	if containsSeparator(text) {
-		issues = append(issues, "区切り線(---)が含まれています")
-	}
-	if boldRE.MatchString(text) {
-		issues = append(issues, "ボールド体(**テキスト**)が使用されています")
-	}
-	if headingRE.MatchString(text) {
-		issues = append(issues, "Markdown見出し(#)が使用されています")
-	}
-	if strings.ContainsRune(text, '\uFF1A') {
-		issues = append(issues, "全角コロン(：)が使用されています。半角コロン(:)を使ってください")
-	}
-	if strings.ContainsRune(text, '\uFF08') || strings.ContainsRune(text, '\uFF09') {
-		issues = append(issues, "全角括弧が使用されています。半角括弧を使ってください")
-	}
-	if hasLeadingMiddleDot(text) {
-		issues = append(issues, "行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください")
-	}
+	issues = append(issues, ValidateFullWidthColon(text)...)
+	issues = append(issues, ValidateFullWidthParentheses(text)...)
+	issues = append(issues, ValidateLeadingMiddleDot(text)...)
 	return issues
 }
 
-// containsSeparator reports whether text has a line that reads as a Markdown
-// horizontal rule. A line that also has a table cell delimiter is treated as a
-// table separator row instead.
-func containsSeparator(text string) bool {
-	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, "---") && !strings.Contains(line, "|") {
-			return true
-		}
+// ValidateHeading reports Markdown heading syntax.
+func ValidateHeading(text string) []string {
+	if headingRE.MatchString(text) {
+		return []string{"Markdown見出し(#)が使用されています"}
 	}
-	return false
+	return nil
 }
 
-// hasLeadingMiddleDot reports whether any line of text starts with a middle
-// dot. A middle dot inside a line is a normal Japanese delimiter.
-func hasLeadingMiddleDot(text string) bool {
+// ValidateBold reports Markdown bold syntax.
+func ValidateBold(text string) []string {
+	if boldRE.MatchString(text) {
+		return []string{"ボールド体(**テキスト**)が使用されています"}
+	}
+	return nil
+}
+
+// ValidateFullWidthColon reports full-width colons.
+func ValidateFullWidthColon(text string) []string {
+	if strings.ContainsRune(text, '\uFF1A') {
+		return []string{"全角コロン(：)が使用されています。半角コロン(:)を使ってください"}
+	}
+	return nil
+}
+
+// ValidateFullWidthParentheses reports full-width parentheses.
+func ValidateFullWidthParentheses(text string) []string {
+	if strings.ContainsRune(text, '\uFF08') || strings.ContainsRune(text, '\uFF09') {
+		return []string{"全角括弧が使用されています。半角括弧を使ってください"}
+	}
+	return nil
+}
+
+// ValidateLeadingMiddleDot reports a middle dot at the beginning of a line. A
+// middle dot inside a line is a normal Japanese delimiter.
+func ValidateLeadingMiddleDot(text string) []string {
 	for _, line := range strings.Split(text, "\n") {
 		if strings.HasPrefix(strings.TrimLeftFunc(line, unicode.IsSpace), "・") {
-			return true
+			return []string{"行頭の中黒(・)は使用できません。マークダウンリスト記法(- )を使ってください"}
 		}
 	}
-	return false
+	return nil
 }
