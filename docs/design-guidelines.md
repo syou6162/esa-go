@@ -84,6 +84,17 @@ HTTP client のテストでは `httptest.Server` を使い、method、path、que
 
 team、カテゴリ prefix、記事名、許可タグ、日付の利用側 policy は package に固定しません。
 
+### `textstyle` package
+
+`textstyle` package は、記事の format をまたいで使い回せる本文の記法ルールを担当します。
+
+- `Validate`: 全角 colon、全角 parentheses、行頭の中黒 `・` の reject
+- `ValidateHeading` / `ValidateBold`: format によって許容したいかどうかが変わる Markdown 記法の reject
+
+どの format でも守りたいルールだけを `Validate` に置き、format 次第で判断が変わるルールは個別の function として export します。呼び出し側は必要なものを組み合わせます。
+
+特定の format にだけ意味があるルールは持ちません。たとえば scratchpad entry の separator である `---` や、entry の先頭に anchor を連結することが前提のルールは `scratchpad` package に残します。新しい format を追加する場合は、記法ルールを書き写すのでなく `textstyle` を呼び、その format 固有の issue と結合して validation error を作ります。
+
 ### 利用側アプリケーション
 
 利用側アプリケーションは、次の責務を担当します。

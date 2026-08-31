@@ -1,6 +1,6 @@
 # esa-go
 
-esa.io の REST client とラクガキ帳（scratchpad）のロジックを提供する Go module です。
+esa.io の REST client とラクガキ帳（scratchpad）のロジック、記事本文の記法ルールを提供する Go module です。
 
 ## パッケージ
 
@@ -8,8 +8,9 @@ esa.io の REST client とラクガキ帳（scratchpad）のロジックを提�
 | --- | --- | --- |
 | `esa` | `github.com/syou6162/esa-go/esa` | esa.io REST client |
 | `scratchpad` | `github.com/syou6162/esa-go/scratchpad` | ラクガキ帳の本文フォーマットに関する純ロジック |
+| `textstyle` | `github.com/syou6162/esa-go/textstyle` | 記事本文の Markdown 記法・日本語約物の記法ルール |
 
-設計方針は [`docs/design-guidelines.md`](docs/design-guidelines.md)、scratchpad の仕様は [`docs/scratchpad-spec.md`](docs/scratchpad-spec.md) にまとめています。
+設計方針は [`docs/design-guidelines.md`](docs/design-guidelines.md)、scratchpad の仕様は [`docs/scratchpad-spec.md`](docs/scratchpad-spec.md)、記法ルールの仕様は [`docs/textstyle-spec.md`](docs/textstyle-spec.md) にまとめています。
 
 ## Revision API について（beta）
 
